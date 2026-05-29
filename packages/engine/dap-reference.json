@@ -1,0 +1,345 @@
+{
+  "_meta": {
+    "source_file": "data/raw/DAP_original.xlsx",
+    "account": "WFM_CORP",
+    "note": "Extracted by manual analysis. Do not re-read the original Excel. See DAP_METHODOLOGY.md for full formula documentation.",
+    "fiscal_year_start_month": "July",
+    "fiscal_year_start_period": "P01",
+    "week_pattern": [4, 4, 5, 4, 4, 5, 4, 4, 5, 4, 4, 5],
+    "total_weeks": 52
+  },
+
+  "fiscal_calendar": {
+    "P01": { "month": "July",      "weeks": 4, "col": "E" },
+    "P02": { "month": "August",    "weeks": 4, "col": "F" },
+    "P03": { "month": "September", "weeks": 5, "col": "G" },
+    "P04": { "month": "October",   "weeks": 4, "col": "H" },
+    "P05": { "month": "November",  "weeks": 4, "col": "I" },
+    "P06": { "month": "December",  "weeks": 5, "col": "J" },
+    "P07": { "month": "January",   "weeks": 4, "col": "K" },
+    "P08": { "month": "February",  "weeks": 4, "col": "L" },
+    "P09": { "month": "March",     "weeks": 5, "col": "M" },
+    "P10": { "month": "April",     "weeks": 4, "col": "N" },
+    "P11": { "month": "May",       "weeks": 4, "col": "O" },
+    "P12": { "month": "June",      "weeks": 5, "col": "P" },
+    "P13": { "month": "Forward1",  "weeks": 4, "col": "Q" },
+    "P14": { "month": "Forward2",  "weeks": 4, "col": "R" },
+    "P15": { "month": "Forward3",  "weeks": 5, "col": "S" },
+    "Annual": { "col": "T", "note": "SUM of P01-P12" }
+  },
+
+  "sheets": {
+    "Account Info": {
+      "type": "input",
+      "purpose": "Account-level rates and configuration applied to all SKUs",
+      "key_cells": {
+        "D3":  { "field": "account_name",           "type": "string" },
+        "D4":  { "field": "sales_manager",          "type": "string" },
+        "D5":  { "field": "sales_channel",          "type": "string", "example": "WFM" },
+        "D6":  { "field": "pricing_strategy",       "type": "string" },
+        "D7":  { "field": "primary_distributor",    "type": "string", "example": "UNFI" },
+        "D8":  { "field": "secondary_distributor",  "type": "string" },
+        "D12": { "field": "number_of_stores",       "type": "integer" },
+        "D13": { "field": "terms_spoils_pct",       "type": "percent", "example": 0.046 },
+        "D14": { "field": "distributor_program_pct","type": "percent", "example": 0.06 },
+        "D15": { "field": "digital_sales_pct",      "type": "percent" },
+        "D16": { "field": "other_program_pct",      "type": "percent" },
+        "G4":  { "field": "tpr_fee",                "type": "currency" },
+        "G5":  { "field": "tpr_length_weeks",       "type": "integer" },
+        "G6":  { "field": "ad_fee",                 "type": "currency" },
+        "G7":  { "field": "ad_length_weeks",        "type": "integer" },
+        "G8":  { "field": "min_pct_to_execute",     "type": "percent" },
+        "G9":  { "field": "can_execute_scans",      "type": "boolean" }
+      }
+    },
+
+    "Distribution": {
+      "type": "input",
+      "purpose": "Per-SKU ACV distribution %, velocity data, pipeline, and slotting by period",
+      "structure": "one row per SKU",
+      "key_columns": {
+        "A":    { "field": "sku_name" },
+        "P-AB": { "field": "acv_pct_by_period", "periods": "P01-P13" },
+        "AV-BH":{ "field": "oracle_prob_weighted_acv", "periods": "P01-P13" },
+        "AD":   { "field": "new_distribution_change_probability" },
+        "AF":   { "field": "pipeline_cases_per_store" },
+        "AG":   { "field": "pipeline_lead_time_periods" },
+        "AI":   { "field": "new_stores_count" },
+        "AJ":   { "field": "units_per_case" },
+        "AM":   { "field": "slotting_lump_sum" },
+        "AN":   { "field": "slotting_per_store" },
+        "AO":   { "field": "slotting_cases_per_store" }
+      },
+      "derived": {
+        "tdp": "acv_pct × number_of_stores",
+        "distribution_baseline": "SUMIFS(velocity, sku, period) × TDP"
+      }
+    },
+
+    "Sales Rates": {
+      "type": "lookup",
+      "purpose": "Maps Channel × Product × Price Point to Sales Rate and Constant Elasticity",
+      "row_count": 527,
+      "columns": {
+        "A": "channel_of_trade",
+        "B": "product_group",
+        "C": "rounding_type",
+        "D": "price_point",
+        "E": "sales_rate",
+        "F": "constant_elasticity"
+      },
+      "lookup_formula": "SUMIFS(sales_rates[E], [B], pg_name, [D], rounded_price, [A], channel)",
+      "notes": "Sales rate is a normalized index (1.0 = base at lowest listed price). Constant elasticity is fixed per product (e.g., -0.96 for COR 1L EVOO)."
+    },
+
+    "Product Group (template)": {
+      "type": "calculation",
+      "purpose": "Per-SKU financial model for all 12 fiscal periods",
+      "dimensions": "237 rows × 36 columns",
+      "period_columns": "E=P01 through P=P12, Q-S=P13-P15, T=Annual",
+      "header_kpis": {
+        "N2": "annual_gross_sales",
+        "N3": "net_effective_price",
+        "T2": "account_allin_trade_rate",
+        "T3": "product_allin_trade_rate",
+        "T4": "product_retailer_working_ts"
+      }
+    },
+
+    "Total": {
+      "type": "aggregation",
+      "purpose": "Flat database (~15,988 rows). Each row = PG × Metric × Period → value. Source for Account Roll-up.",
+      "row_structure": "product_group | metric_name | period | value"
+    },
+
+    "Account Roll-up": {
+      "type": "output",
+      "purpose": "Monthly P&L across all SKUs using SUMIFS on Total sheet",
+      "key_metrics": [
+        "unit_sales", "gross_sales", "working_spend", "ts_spend",
+        "distributor_spend", "slotting", "net_sales",
+        "profit_after_working_spend", "profit_after_total_spend",
+        "total_retail_dollars", "total_retail_margin", "retail_margin_pct"
+      ]
+    }
+  },
+
+  "product_group_row_map": {
+    "inputs": {
+      "seasonality_index":          { "row": 7,   "section": "header",    "per_period": true },
+      "base_price":                  { "row": 10,  "section": "everyday",  "per_period": true,  "type": "currency" },
+      "gross_price":                 { "row": 11,  "section": "everyday",  "per_period": true,  "type": "currency" },
+      "edlp_direct":                 { "row": 12,  "section": "everyday",  "per_period": true,  "type": "currency" },
+      "price_impact_manual":         { "row": 13,  "section": "everyday",  "per_period": true,  "type": "percent",  "note": "Overrides auto elasticity calc if populated" },
+      "upcharge_dist_pct":           { "row": 15,  "section": "everyday",  "per_period": false, "type": "percent",  "example": 0.08 },
+      "upcharge_cat_pct":            { "row": 23,  "section": "everyday",  "per_period": false, "type": "percent",  "example": 0.48,  "note": "Used in MCB cost to manufacturer calc" },
+      "edlp_mcb_pct":                { "row": 25,  "section": "everyday",  "per_period": true,  "type": "percent" },
+      "misc_impact_pct":             { "row": 31,  "section": "everyday",  "per_period": true,  "type": "percent" },
+      "name_promo1":                 { "row": 35,  "section": "promo1",    "per_period": true,  "type": "string" },
+      "price_promo1":                { "row": 36,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "weeks_event_promo1":          { "row": 37,  "section": "promo1",    "per_period": true,  "type": "integer",  "valid_range": [0, 5] },
+      "scan_promo1":                 { "row": 38,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "fixed_promo1":                { "row": 39,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "lift_promo1":                 { "row": 40,  "section": "promo1",    "per_period": true,  "type": "decimal",  "note": "e.g. 1.29 = 129% lift" },
+      "notes_promo1":                { "row": 42,  "section": "promo1",    "per_period": true,  "type": "percent",  "note": "Depth for calendar display only" },
+      "mcb_promo1_pct":              { "row": 51,  "section": "promo1",    "per_period": true,  "type": "percent" },
+      "coupon_discount_promo1":      { "row": 55,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "coupon_cost_promo1":          { "row": 56,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "coupon_redemption_promo1":    { "row": 57,  "section": "promo1",    "per_period": true,  "type": "percent" },
+      "admin_promo1":                { "row": 58,  "section": "promo1",    "per_period": true,  "type": "currency", "note": "Excluded from retailer margin %" },
+      "buyout_weeks_promo1":         { "row": 59,  "section": "promo1",    "per_period": true,  "type": "integer" },
+      "buyout_amount_promo1":        { "row": 60,  "section": "promo1",    "per_period": true,  "type": "currency" },
+      "brick_promo1":                { "row": 62,  "section": "promo1",    "per_period": true,  "type": "currency", "note": "Lump sum deduction" },
+      "name_promo2":                 { "row": 66,  "section": "promo2",    "per_period": true,  "type": "string" },
+      "price_promo2":                { "row": 67,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "weeks_event_promo2":          { "row": 68,  "section": "promo2",    "per_period": true,  "type": "integer",  "valid_range": [0, 5] },
+      "scan_promo2":                 { "row": 69,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "fixed_promo2":                { "row": 70,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "lift_promo2":                 { "row": 71,  "section": "promo2",    "per_period": true,  "type": "decimal" },
+      "notes_promo2":                { "row": 73,  "section": "promo2",    "per_period": true,  "type": "percent" },
+      "mcb_promo2_pct":              { "row": 82,  "section": "promo2",    "per_period": true,  "type": "percent" },
+      "coupon_discount_promo2":      { "row": 86,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "coupon_cost_promo2":          { "row": 87,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "coupon_redemption_promo2":    { "row": 88,  "section": "promo2",    "per_period": true,  "type": "percent" },
+      "admin_promo2":                { "row": 89,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "buyout_weeks_promo2":         { "row": 90,  "section": "promo2",    "per_period": true,  "type": "integer" },
+      "buyout_amount_promo2":        { "row": 91,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "brick_promo2":                { "row": 93,  "section": "promo2",    "per_period": true,  "type": "currency" },
+      "cogs":                        { "row": 147, "section": "cost",      "per_period": true,  "type": "currency" },
+      "case_count":                  { "row": 148, "section": "cost",      "per_period": false, "type": "integer" }
+    },
+
+    "outputs": {
+      "standard_cases":              { "row": 96  },
+      "unit_sales":                  { "row": 97  },
+      "baseline_price_only":         { "row": 98  },
+      "baseline_tdp_only":           { "row": 99  },
+      "baseline_full":               { "row": 100 },
+      "promo_units":                 { "row": 101 },
+      "non_promo_units":             { "row": 102 },
+      "incremental_units":           { "row": 103 },
+      "base_units":                  { "row": 104 },
+      "velocity_plus_up":            { "row": 105 },
+      "pipeline_units":              { "row": 106 },
+      "gross_sales":                 { "row": 108 },
+      "incremental_gross":           { "row": 109 },
+      "base_gross":                  { "row": 110 },
+      "cost_of_goods":               { "row": 112 },
+      "total_spend_pricing_promo":   { "row": 116 },
+      "incremental_spend":           { "row": 117 },
+      "base_spend":                  { "row": 118 },
+      "admin_fee_spend":             { "row": 119 },
+      "slotting_prob_weighted":      { "row": 120 },
+      "total_fixed":                 { "row": 121 },
+      "total_brick":                 { "row": 122 },
+      "activity_spend":              { "row": 123 },
+      "everyday_spend":              { "row": 124 },
+      "buyout_spend":                { "row": 125 },
+      "retailer_working_ts":         { "row": 126 },
+      "profit_after_working_spend":  { "row": 128 },
+      "promo_profit":                { "row": 129 },
+      "base_profit":                 { "row": 130 },
+      "incremental_profit_after_trade": { "row": 131 },
+      "profit_per_unit_after_spend": { "row": 132 },
+      "total_retail_dollars":        { "row": 134 },
+      "total_retail_margin":         { "row": 138 },
+      "retail_margin_pct":           { "row": 141 },
+      "tdps_prob_weighted":          { "row": 143 },
+      "tdps_100pct":                 { "row": 144 },
+      "distributor_working_spend":   { "row": 194 },
+      "digital_sales_spend":         { "row": 195 },
+      "other_spend":                 { "row": 196 },
+      "terms_spoils_spend":          { "row": 197 },
+      "retailer_working_spend":      { "row": 198 },
+      "total_working_distributor":   { "row": 199 },
+      "total_spend_all":             { "row": 200 },
+      "profit_after_total_spend":    { "row": 201 },
+      "profit_after_promo_pricing":  { "row": 202 }
+    }
+  },
+
+  "formulas": {
+    "baseline_full": {
+      "formula": "distribution_baseline × (1 + price_elasticity_impact) × (1 + misc_impact_pct) × seasonality_index",
+      "dependencies": ["Distribution sheet", "Sales Rates (elasticity)", "seasonality_index (row 7)"]
+    },
+    "price_elasticity_impact": {
+      "formula": "IF(price_impact_manual IS SET, price_impact_manual, (new_edp / current_edp)^elasticity − 1)",
+      "elasticity_source": "observed: LN(new_rate/current_rate) / LN(new_price/current_price); else constant_elasticity from Sales Rates table"
+    },
+    "promo_units": {
+      "formula": "(weeks_event_promo1 × baseline_full × (1 + lift_promo1)) + (weeks_event_promo2 × baseline_full × (1 + lift_promo2))"
+    },
+    "incremental_units": {
+      "formula": "(weeks_event_promo1 × baseline_full × lift_promo1) + (weeks_event_promo2 × baseline_full × lift_promo2)"
+    },
+    "non_promo_units": {
+      "formula": "(weeks_in_period − weeks_event_promo1 − weeks_event_promo2) × baseline_full"
+    },
+    "unit_sales": {
+      "formula": "non_promo_units + promo_units"
+    },
+    "gross_sales": {
+      "formula": "unit_sales × gross_price"
+    },
+    "everyday_net_cost": {
+      "formula": "gross_price × (1 + upcharge_dist_pct) − edlp_direct − (edlp_mcb_pct × gross_price × (1 + upcharge_dist_pct))",
+      "note": "MCB credit uses DISTRIBUTOR upcharge"
+    },
+    "per_unit_promo_cost_to_mfr": {
+      "formula": "scan_promo + (coupon_cost_promo × coupon_redemption_promo) + (mcb_promo_pct × gross_price × (1 + upcharge_cat_pct))",
+      "note": "MCB cost uses CATALOG upcharge — different from credit to retailer"
+    },
+    "per_unit_credit_to_retailer": {
+      "formula": "scan_promo + (coupon_discount_promo × coupon_redemption_promo) + (mcb_promo_pct × gross_price × (1 + upcharge_dist_pct))",
+      "note": "MCB credit uses DISTRIBUTOR upcharge"
+    },
+    "everyday_retail_margin_pct": {
+      "formula": "1 − (everyday_net_cost / base_price)"
+    },
+    "promo_retail_margin_pct": {
+      "formula": "1 − ((everyday_net_cost − per_unit_credit_to_retailer) / (price_promo − coupon_discount_promo × coupon_redemption_promo))"
+    },
+    "buyout_spend": {
+      "formula": "buyout_weeks × baseline_full × buyout_amount_per_unit"
+    },
+    "base_profit": {
+      "formula": "base_units × (gross_price − edlp_cost_per_unit − cogs)"
+    },
+    "incremental_profit_after_trade": {
+      "formula": "incremental_gross − (incremental_units × cogs) − incremental_spend"
+    },
+    "profit_after_working_spend": {
+      "formula": "base_profit + incremental_profit_after_trade − brick − distributor_working_spend − digital_sales_spend − other_spend"
+    },
+    "profit_after_total_spend": {
+      "formula": "profit_after_working_spend − terms_spoils_spend − slotting_prob_weighted"
+    },
+    "net_sales": {
+      "formula": "gross_sales − total_spend_all"
+    },
+    "distributor_working_spend": {
+      "formula": "gross_sales × distributor_program_pct",
+      "source": "Account Info D14"
+    },
+    "digital_sales_spend": {
+      "formula": "gross_sales × digital_sales_pct",
+      "source": "Account Info D15"
+    },
+    "other_spend": {
+      "formula": "gross_sales × other_program_pct",
+      "source": "Account Info D16"
+    },
+    "terms_spoils_spend": {
+      "formula": "gross_sales × terms_spoils_pct",
+      "source": "Account Info D13",
+      "note": "Non-working trade — excluded from retailer margin calculation"
+    },
+    "promo_efficiency": {
+      "formula": "incremental_gross / incremental_spend"
+    },
+    "promo_roi": {
+      "formula": "incremental_profit_after_trade / incremental_spend"
+    },
+    "allin_trade_rate": {
+      "formula": "total_spend_all / gross_sales"
+    }
+  },
+
+  "price_rounding": {
+    "D": { "name": "Dimes",   "formula": "MROUND(price, 0.1) - 0.01" },
+    "Q": { "name": "Quarters","formula": "VLOOKUP against Helpers quarters table (columns A-B)" },
+    "H": { "name": "Halves",  "formula": "MROUND(price, 0.5) - 0.01" },
+    "Do":{ "name": "Dollars", "formula": "MROUND(price, 1.0) - 0.01" }
+  },
+
+  "known_skus_wfm": [
+    "Global Blend 1.4L",
+    "COR 100% Cali EVOO 1L",
+    "Lucini Pasta Sauce"
+  ],
+  "_sku_note": "~40 product group sheets total in WFM DAP. Full SKU list in Helpers sheet columns T-V.",
+
+  "ambiguities": [
+    {
+      "item": "Promo 2 row numbers 66-93",
+      "status": "Inferred as mirror of Promo 1 rows 35-62. Confirm individual row offsets if building engine."
+    },
+    {
+      "item": "Pipeline volume formula",
+      "status": "Pulls from Distribution sheet; exact SUMIFS parameters not fully confirmed."
+    },
+    {
+      "item": "Quarters rounding table boundaries",
+      "status": "Stored in Helpers columns A-B. Boundary values not extracted — need to read Helpers sheet if implementing Q rounding."
+    },
+    {
+      "item": "Seasonality coefficients per SKU",
+      "status": "All current WFM SKUs use the Oils category pattern. FY28+ repeats FY27. Exact values need to be read from row 7 of each PG sheet."
+    },
+    {
+      "item": "Sales Rates table full contents",
+      "status": "527 rows confirmed. Full contents not extracted into this file — load from Excel on first import."
+    }
+  ]
+}
