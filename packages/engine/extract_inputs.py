@@ -160,13 +160,16 @@ def extract_distribution_inputs(wb) -> dict:
             raw_prob = get(_DIST_COL_PROB_P01 + i)
             prob[p] = raw_prob if raw_prob is not None else 1.0
 
-        # Effective ACV = prior ACV + (scenario ACV delta) × probability
-        # Only the incremental change is probability-weighted; the base is treated as certain.
+        # Effective ACV = prior weighted ACV + (raw ACV delta) × probability
+        # Delta uses raw scenario ACV differences; base accumulates the weighted value.
+        # effective_acv[p] = effective_acv[p-1] + (raw[p] - raw[p-1]) × prob[p]
         effective_acv = {}
-        prev = current_acv
+        prev_weighted = current_acv
+        prev_raw      = current_acv  # raw ACV[p-1]; col N for P01
         for p in PERIODS:
-            effective_acv[p] = prev + (acv_pct[p] - prev) * prob[p]
-            prev = acv_pct[p]
+            effective_acv[p] = prev_weighted + (acv_pct[p] - prev_raw) * prob[p]
+            prev_weighted = effective_acv[p]
+            prev_raw      = acv_pct[p]
 
         # Accumulate SUMPRODUCT contribution for this item into the PG total
         if name not in pg_effective:
@@ -255,6 +258,7 @@ def extract(excel_path: Path) -> dict:
             "slotting_lump_sum":            dist.get("slotting_lump_sum"),
             "slotting_per_store":           dist.get("slotting_per_store"),
             "slotting_cases_per_store":     dist.get("slotting_cases_per_store"),
+            "probability":                  dist.get("probability"),
             "effective_velocity_by_period": dist.get("effective_velocity_by_period"),
             "current_inputs":               pg_data["current"],
             "periods":                      pg_data["periods"],
