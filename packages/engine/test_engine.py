@@ -85,6 +85,10 @@ class ScenarioInputs:
     # Cost
     cogs: float
 
+    # Pre-computed SUMPRODUCT baseline for PGs with multiple items in the Distribution sheet.
+    # If set, bypasses velocity × TDP and uses this value directly as dist_baseline.
+    dist_baseline_override: Optional[float] = None
+
 
 # ---------------------------------------------------------------------------
 # Engine
@@ -95,7 +99,10 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
 
     # --- 1. Distribution baseline ---
     tdp = inp.acv_pct * cfg.number_of_stores
-    dist_baseline = inp.velocity * tdp          # weekly units for whole account
+    if inp.dist_baseline_override is not None:
+        dist_baseline = inp.dist_baseline_override
+    else:
+        dist_baseline = inp.velocity * tdp      # weekly units for whole account
 
     # --- 2. Price elasticity impact ---
     if inp.price_impact_manual is not None:
@@ -243,10 +250,13 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
         # Spend
         "retailer_working_spend":           round(retailer_working_spend, 2),
         "distributor_working":              round(distributor_working, 2),
+        "digital_sales_spend":              round(digital_sales_spend, 2),
+        "other_spend":                      round(other_spend, 2),
         "terms_spoils_spend":               round(terms_spoils_spend, 2),
         "total_spend":                      round(total_spend, 2),
         "allin_trade_rate_pct":             round(allin_trade_rate * 100, 2),
         # Profit
+        "total_cogs":                       round(total_cogs, 2),
         "profit_after_working_spend":       round(profit_after_working_spend, 2),
         "profit_after_total_spend":         round(profit_after_total_spend, 2),
         # Promo analytics

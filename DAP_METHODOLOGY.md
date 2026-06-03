@@ -423,7 +423,38 @@ Trade Summary / PG Summary / Distribution Summary
 | Quarters rounding lookup table | Stored in Helpers columns A–B; boundary values not fully extracted |
 | Fixed Fee Calculator allocation | Proportional to baseline gross sales share across SKUs; used for lump-sum events |
 | Scenario (alpha) sheet logic | Not replicated — being replaced by this web app |
+| **COR Marinade** extraction | ACV is 0 in scenario cols (P–AB) for all items — data may live in oracle-weighted ACV cols (AV–BH). Engine produces all-zero output for this PG when extracted from Excel. Does not affect web app (users enter ACV directly). |
+| **COR Vinaigrette Dressing** extraction | Engine over-counts baseline by ~8.5% — some Distribution rows appear to be placeholder/scenario rows that the Excel formula excludes. Root cause not yet identified. Does not affect web app. |
+| **Lucini Everyday EVOO 1L** extraction | Single-row PG but ~1.5% systematic gap vs Excel. Likely a minor velocity source difference. Does not affect web app. |
 
+
+## 10. Slotting Allocation Methodology
+
+Slotting is extracted from the Distribution sheet as a single annual lump sum per SKU (`slotting_lump_sum`, col AM). The engine requires a per-period value. Allocation rule:
+
+**Slotting is assigned to the period(s) where new distribution is added**, defined as any period where ACV% increases vs the prior period.
+
+### Algorithm
+
+1. Compute `delta[p] = max(0, acv_pct[p] − acv_pct[p−1])` for P02–P12. For P01, compare against 0 (no prior-year data available).
+2. `total_delta = sum of all positive deltas`
+3. `slotting[p] = (delta[p] / total_delta) × slotting_lump_sum`
+4. If `total_delta = 0` (flat ACV all year) or `slotting_lump_sum = 0`, all periods receive `slotting = 0`.
+
+### Examples
+
+| Scenario | ACV pattern | Slotting allocation |
+|---|---|---|
+| New distribution mid-year | P01–P03 = 0%, P04 = 100% | 100% in P04 |
+| Existing distribution, no change | P01–P12 = 80% (P01 delta = 80pp vs 0) | 100% in P01 |
+| Two waves | P04: 0%→60%, P09: 60%→90% | 67% in P04, 33% in P09 |
+| Declining ACV | P01 = 90%, P06 = 50% | No increase → slotting = 0 all periods |
+
+### Rationale
+
+Slotting is a fee paid to a retailer to secure shelf space for **new** store entries. Allocating it to the period where ACV increases ties the cost to the distribution event that triggers it, rather than spreading it arbitrarily across the year.
+
+---
 
 ## Domain Vocabulary
 

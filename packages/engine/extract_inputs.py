@@ -109,12 +109,29 @@ _DIST_HEADER_KEYWORDS = {"SKU", "PRODUCT", "ITEM", "NAME", "GROUP", "DESCRIPTION
 # ---------------------------------------------------------------------------
 
 def extract_distribution_inputs(wb) -> dict:
-    """Returns {sku_name: {velocity, acv_pct: {P01-P12: float}}}.
+    """Returns {pg_name: {velocity, acv_pct, effective_velocity_by_period, ...}}.
+
+    The Distribution sheet is at item level — col B is the Product Group (PG) name,
+    col D is the individual item name. One PG can have many items. The PG sheet
+    aggregates them via SUMPRODUCT, so the effective per-store weekly rate is:
+
+        effective_velocity[p] = SUM_items(velocity_i × acv_pct_i[p])
+
+    This is stored as effective_velocity_by_period and used in run_account.py to
+    compute dist_baseline = effective_velocity[p] × number_of_stores.
+
+    velocity and acv_pct are kept from the first non-zero item row for UI display
+    (web app scenario editing) where a single value per field is expected.
 
     ACV stored as whole % in Excel (e.g. 99.52); converted to decimal (0.9952).
     """
     ws = wb["Distribution"]
-    skus = {}
+
+    # Accumulate per PG: effective_velocity[p] += velocity_i × acv_pct_i[p]
+    pg_effective: dict = {}   # pg_name → {P01-P12: float}
+    pg_primary:   dict = {}   # pg_name → first non-zero row data (for velocity/acv UI fields)
+    pg_slotting:  dict = {}   # pg_name → slotting (sum across items)
+
     for row in ws.iter_rows(min_row=_DIST_DATA_START_ROW, values_only=False):
         cell_b = row[_DIST_COL_SKU_NAME - 1]
         raw = cell_b.value
@@ -124,19 +141,48 @@ def extract_distribution_inputs(wb) -> dict:
         if any(kw in name.upper() for kw in _DIST_HEADER_KEYWORDS):
             continue
         r = cell_b.row
-        get = lambda col: _num(ws.cell(row=r, column=col).value)
-        acv = {}
+        get = lambda col, _r=r: _num(ws.cell(row=_r, column=col).value)
+
+        velocity = get(_DIST_COL_VELOCITY) or 0.0
+        acv_pct  = {}
         for i, p in enumerate(PERIODS):
             raw_acv = get(_DIST_COL_ACV_P01 + i)
-            acv[p] = raw_acv / 100.0 if raw_acv is not None else None
-        skus[name] = {
-            "velocity":                 get(_DIST_COL_VELOCITY),
-            "slotting_lump_sum":        get(_DIST_COL_SLOT_LUMP),
-            "slotting_per_store":       get(_DIST_COL_SLOT_PER_STORE),
-            "slotting_cases_per_store": get(_DIST_COL_SLOT_CASES),
-            "acv_pct":                  acv,
+            acv_pct[p] = (raw_acv / 100.0) if raw_acv is not None else 0.0
+
+        # Accumulate SUMPRODUCT contribution for this item into the PG total
+        if name not in pg_effective:
+            pg_effective[name] = {p: 0.0 for p in PERIODS}
+        for p in PERIODS:
+            pg_effective[name][p] += velocity * acv_pct[p]
+
+        # Keep slotting sum across all items in the PG
+        slot = get(_DIST_COL_SLOT_LUMP) or 0.0
+        pg_slotting[name] = pg_slotting.get(name, 0.0) + slot
+
+        # Keep first non-zero item row for UI-facing velocity / acv_pct fields
+        if name not in pg_primary and velocity > 0:
+            pg_primary[name] = {
+                "velocity":                 velocity,
+                "slotting_per_store":       get(_DIST_COL_SLOT_PER_STORE),
+                "slotting_cases_per_store": get(_DIST_COL_SLOT_CASES),
+                "acv_pct":                  {p: acv_pct[p] for p in PERIODS},
+            }
+
+    # Merge into final output
+    pgs = {}
+    for name in pg_effective:
+        primary = pg_primary.get(name, {})
+        pgs[name] = {
+            "velocity":                   primary.get("velocity", 0.0),
+            "slotting_lump_sum":          pg_slotting.get(name, 0.0),
+            "slotting_per_store":         primary.get("slotting_per_store"),
+            "slotting_cases_per_store":   primary.get("slotting_cases_per_store"),
+            "acv_pct":                    primary.get("acv_pct", {p: 0.0 for p in PERIODS}),
+            # Pre-computed SUMPRODUCT baseline rate (per store per week) for this PG per period.
+            # dist_baseline = effective_velocity[p] × number_of_stores
+            "effective_velocity_by_period": pg_effective[name],
         }
-    return skus
+    return pgs
 
 
 def extract_pg_inputs(ws) -> dict:
@@ -175,11 +221,12 @@ def extract(excel_path: Path) -> dict:
         for period in PERIODS:
             periods[period]["acv_pct"] = acv.get(period)
         skus[name] = {
-            "velocity":                 dist.get("velocity"),
-            "slotting_lump_sum":        dist.get("slotting_lump_sum"),
-            "slotting_per_store":       dist.get("slotting_per_store"),
-            "slotting_cases_per_store": dist.get("slotting_cases_per_store"),
-            "periods":                  periods,
+            "velocity":                     dist.get("velocity"),
+            "slotting_lump_sum":            dist.get("slotting_lump_sum"),
+            "slotting_per_store":           dist.get("slotting_per_store"),
+            "slotting_cases_per_store":     dist.get("slotting_cases_per_store"),
+            "effective_velocity_by_period": dist.get("effective_velocity_by_period"),
+            "periods":                      periods,
         }
 
     return {
