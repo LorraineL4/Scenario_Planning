@@ -19,6 +19,7 @@ Output JSON shape:
         "slotting_lump_sum":        float,
         "slotting_per_store":       float,
         "slotting_cases_per_store": float,
+        "current_inputs":           { base_price, gross_price, ... all promo fields ... },
         "periods": {
           "P01": { acv_pct, base_price, gross_price, edlp_direct, ... all promo fields ..., cogs },
           ...
@@ -96,12 +97,16 @@ PG_PERIOD_INPUTS = {
 
 _DIST_COL_SKU_NAME       = 2   # B — Product Group name
 _DIST_COL_VELOCITY       = 12  # L — Account Base Unit Velocity (units/store/week)
+_DIST_COL_ACV_CURRENT    = 14  # N — current account ACV % (prior-period base for P01 delta formula)
 _DIST_COL_ACV_P01        = 16  # P = P01; Q=P02 … AA=P12 (stored as whole %, e.g. 99.52)
+_DIST_COL_PROB_P01       = 74  # BV = P01 probability; BW=P02 … CG=P12 (BV-CH span P01-P13)
 _DIST_COL_SLOT_LUMP      = 39  # AM — slotting lump sum
 _DIST_COL_SLOT_PER_STORE = 40  # AN
 _DIST_COL_SLOT_CASES     = 41  # AO
 _DIST_DATA_START_ROW  = 7
 _DIST_HEADER_KEYWORDS = {"SKU", "PRODUCT", "ITEM", "NAME", "GROUP", "DESCRIPTION"}
+
+_PG_COL_CURRENT = 4  # D — current values column in PG sheets (before P01–P12 at E–P)
 
 
 # ---------------------------------------------------------------------------
@@ -115,15 +120,14 @@ def extract_distribution_inputs(wb) -> dict:
     col D is the individual item name. One PG can have many items. The PG sheet
     aggregates them via SUMPRODUCT, so the effective per-store weekly rate is:
 
-        effective_velocity[p] = SUM_items(velocity_i × acv_pct_i[p])
+        effective_velocity[p] = SUM_items(velocity_i × effective_acv_i[p])
 
-    This is stored as effective_velocity_by_period and used in run_account.py to
-    compute dist_baseline = effective_velocity[p] × number_of_stores.
+    effective_acv applies probability weighting to the incremental ACV change only:
+        effective_acv[P01] = current_acv + (acv[P01] - current_acv) × prob[P01]
+        effective_acv[p]   = acv[p-1]    + (acv[p]   - acv[p-1])   × prob[p]
 
-    velocity and acv_pct are kept from the first non-zero item row for UI display
-    (web app scenario editing) where a single value per field is expected.
-
-    ACV stored as whole % in Excel (e.g. 99.52); converted to decimal (0.9952).
+    current_acv = col N; scenario acv = cols P–AA; per-period prob = cols BV–CG.
+    ACV values stored as whole % in Excel (e.g. 99.52); converted to decimal (0.9952).
     """
     ws = wb["Distribution"]
 
@@ -143,29 +147,45 @@ def extract_distribution_inputs(wb) -> dict:
         r = cell_b.row
         get = lambda col, _r=r: _num(ws.cell(row=_r, column=col).value)
 
-        velocity = get(_DIST_COL_VELOCITY) or 0.0
-        acv_pct  = {}
+        velocity    = get(_DIST_COL_VELOCITY) or 0.0
+        current_acv = (get(_DIST_COL_ACV_CURRENT) or 0.0) / 100.0
+
+        acv_pct = {}
         for i, p in enumerate(PERIODS):
             raw_acv = get(_DIST_COL_ACV_P01 + i)
             acv_pct[p] = (raw_acv / 100.0) if raw_acv is not None else 0.0
+
+        prob = {}
+        for i, p in enumerate(PERIODS):
+            raw_prob = get(_DIST_COL_PROB_P01 + i)
+            prob[p] = raw_prob if raw_prob is not None else 1.0
+
+        # Effective ACV = prior ACV + (scenario ACV delta) × probability
+        # Only the incremental change is probability-weighted; the base is treated as certain.
+        effective_acv = {}
+        prev = current_acv
+        for p in PERIODS:
+            effective_acv[p] = prev + (acv_pct[p] - prev) * prob[p]
+            prev = acv_pct[p]
 
         # Accumulate SUMPRODUCT contribution for this item into the PG total
         if name not in pg_effective:
             pg_effective[name] = {p: 0.0 for p in PERIODS}
         for p in PERIODS:
-            pg_effective[name][p] += velocity * acv_pct[p]
+            pg_effective[name][p] += velocity * effective_acv[p]
 
         # Keep slotting sum across all items in the PG
         slot = get(_DIST_COL_SLOT_LUMP) or 0.0
         pg_slotting[name] = pg_slotting.get(name, 0.0) + slot
 
-        # Keep first non-zero item row for UI-facing velocity / acv_pct fields
+        # Keep first non-zero item row for UI-facing velocity / acv_pct / probability fields
         if name not in pg_primary and velocity > 0:
             pg_primary[name] = {
                 "velocity":                 velocity,
                 "slotting_per_store":       get(_DIST_COL_SLOT_PER_STORE),
                 "slotting_cases_per_store": get(_DIST_COL_SLOT_CASES),
                 "acv_pct":                  {p: acv_pct[p] for p in PERIODS},
+                "probability":              {p: prob[p] for p in PERIODS},
             }
 
     # Merge into final output
@@ -178,6 +198,7 @@ def extract_distribution_inputs(wb) -> dict:
             "slotting_per_store":         primary.get("slotting_per_store"),
             "slotting_cases_per_store":   primary.get("slotting_cases_per_store"),
             "acv_pct":                    primary.get("acv_pct", {p: 0.0 for p in PERIODS}),
+            "probability":                primary.get("probability", {p: 1.0 for p in PERIODS}),
             # Pre-computed SUMPRODUCT baseline rate (per store per week) for this PG per period.
             # dist_baseline = effective_velocity[p] × number_of_stores
             "effective_velocity_by_period": pg_effective[name],
@@ -186,14 +207,23 @@ def extract_distribution_inputs(wb) -> dict:
 
 
 def extract_pg_inputs(ws) -> dict:
-    """Extract per-period scenario inputs from a PG sheet."""
+    """Extract per-period scenario inputs and current values from a PG sheet.
+
+    Returns {"periods": {P01-P12: {field: value}}, "current": {field: value}}.
+    "current" holds col D values — the pre-scenario baseline for pricing/promo fields.
+    """
     periods = {}
     for period, col in PERIOD_COL.items():
         period_data = {}
         for field, meta in PG_PERIOD_INPUTS.items():
             period_data[field] = _coerce(ws.cell(row=meta["row"], column=col).value)
         periods[period] = period_data
-    return periods
+
+    current = {
+        field: _coerce(ws.cell(row=meta["row"], column=_PG_COL_CURRENT).value)
+        for field, meta in PG_PERIOD_INPUTS.items()
+    }
+    return {"periods": periods, "current": current}
 
 
 # ---------------------------------------------------------------------------
@@ -215,18 +245,19 @@ def extract(excel_path: Path) -> dict:
     skus = {}
     for name in pg_names:
         print(f"      - {name}", flush=True)
-        periods = extract_pg_inputs(wb[name])
+        pg_data = extract_pg_inputs(wb[name])
         dist = dist_inputs.get(name, {})
         acv = dist.get("acv_pct", {})
         for period in PERIODS:
-            periods[period]["acv_pct"] = acv.get(period)
+            pg_data["periods"][period]["acv_pct"] = acv.get(period)
         skus[name] = {
             "velocity":                     dist.get("velocity"),
             "slotting_lump_sum":            dist.get("slotting_lump_sum"),
             "slotting_per_store":           dist.get("slotting_per_store"),
             "slotting_cases_per_store":     dist.get("slotting_cases_per_store"),
             "effective_velocity_by_period": dist.get("effective_velocity_by_period"),
-            "periods":                      periods,
+            "current_inputs":               pg_data["current"],
+            "periods":                      pg_data["periods"],
         }
 
     return {

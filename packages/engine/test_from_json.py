@@ -7,7 +7,8 @@ for every SKU × period, and compares results against Excel-extracted expected v
 
 Run from project root:
     python packages/engine/test_from_json.py
-    python packages/engine/test_from_json.py --sku "COR 100% Cali EVOO 1L"  (single SKU)
+    python packages/engine/test_from_json.py --sku "COR 100% Cali EVOO 1L"
+    python packages/engine/test_from_json.py --sku "COR 100% Cali EVOO 1L" "Lucini Everyday EVOO 1L"
     python packages/engine/test_from_json.py --sku "COR 100% Cali EVOO 1L" --period P01
 """
 
@@ -55,7 +56,7 @@ def compare_period(engine: dict, expected: dict, sku: str, period: str) -> list:
 
 def main():
     parser = argparse.ArgumentParser(description="Run end-to-end engine test against Excel expected values.")
-    parser.add_argument("--sku",    default=None, help="Test a single SKU name")
+    parser.add_argument("--sku",    default=None, nargs="+", help="Test one or more SKU names")
     parser.add_argument("--period", default=None, help="Test a single period (e.g. P01)")
     args = parser.parse_args()
 
@@ -63,7 +64,7 @@ def main():
     inp_data      = load_json(INPUTS_PATH)
     expected_data = load_json(EXPECTED_PATH)
 
-    skus_to_test = [args.sku] if args.sku else list(inp_data["skus"].keys())
+    skus_to_test = args.sku if args.sku else list(inp_data["skus"].keys())
     periods_to_test = [args.period] if args.period else PERIODS
 
     total_checks = 0

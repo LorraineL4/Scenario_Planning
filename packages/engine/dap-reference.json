@@ -59,7 +59,8 @@
       "structure": "one row per SKU",
       "key_columns": {
         "A":    { "field": "sku_name" },
-        "AV-BH":{ "field": "oracle_prob_weighted_acv", "periods": "P01-P13" },
+        "AV-BH":{ "field": "unknown_tbd", "note": "not ACV, not per-period probability — needs clarification" },
+        "BV-CH":{ "field": "per_period_distribution_probability", "periods": "P01-P13" },
         "AD":   { "field": "new_distribution_change_probability" },
         "AF":   { "field": "pipeline_cases_per_store" },
         "AG":   { "field": "pipeline_lead_time_periods" },
