@@ -4,8 +4,8 @@ Run:  python packages/engine/test_engine.py
 Cross-check the printed outputs against your Excel DAP.
 """
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import FrozenSet, Optional
 
 
 # ---------------------------------------------------------------------------
@@ -16,16 +16,22 @@ from typing import Optional
 class Config:
     """Set once per account/SKU — shared across all scenarios."""
     number_of_stores: int
-    velocity: float             # units per store per week (single value per SKU)
     seasonality_index: float    # for the period being tested
     weeks_in_period: int
     terms_spoils_pct: float
     distributor_program_pct: float
     digital_sales_pct: float
     other_program_pct: float
-    slotting: float             # lump sum for this period
     constant_elasticity: float  # from Sales Rates table (e.g. -0.96 for COR 1L EVOO)
     current_base_price: float   # reference price used for elasticity auto-calc
+    net_sales_trade_components: FrozenSet[str] = field(default_factory=lambda: frozenset({
+        "retailer_working_spend",
+        "distributor_working",
+        "digital_sales_spend",
+        "other_spend",
+        "terms_spoils_spend",
+        "slotting",
+    }))
 
 
 @dataclass
@@ -33,6 +39,8 @@ class ScenarioInputs:
     """Entered per scenario, per period."""
     # Distribution
     acv_pct: float              # % store coverage → TDP = acv_pct × number_of_stores
+    velocity: float             # units per store per week
+    slotting: float             # lump sum for this period
 
     # Everyday pricing
     base_price: float           # retail shelf price
@@ -87,7 +95,7 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
 
     # --- 1. Distribution baseline ---
     tdp = inp.acv_pct * cfg.number_of_stores
-    dist_baseline = cfg.velocity * tdp          # weekly units for whole account
+    dist_baseline = inp.velocity * tdp          # weekly units for whole account
 
     # --- 2. Price elasticity impact ---
     if inp.price_impact_manual is not None:
@@ -165,9 +173,21 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     total_spend = (
         retailer_working_spend + distributor_working
         + digital_sales_spend + other_spend
-        + terms_spoils_spend + cfg.slotting
+        + terms_spoils_spend + inp.slotting
     )
-    net_sales = gross_sales - total_spend
+
+    _component_map = {
+        "retailer_working_spend": retailer_working_spend,
+        "distributor_working":    distributor_working,
+        "digital_sales_spend":    digital_sales_spend,
+        "other_spend":            other_spend,
+        "terms_spoils_spend":     terms_spoils_spend,
+        "slotting":               inp.slotting,
+    }
+    defined_trade = sum(
+        _component_map[k] for k in cfg.net_sales_trade_components if k in _component_map
+    )
+    net_sales = gross_sales - defined_trade
 
     # Incremental spend (for ROI calc — variable per-unit portion only)
     incremental_spend = incremental_units_1 * per_unit_cost_mfr_1 + incremental_units_2 * per_unit_cost_mfr_2
@@ -186,7 +206,7 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
         profit_after_working_spend + distributor_working + digital_sales_spend + other_spend
         - base_profit + brick
     )
-    profit_after_total_spend = profit_after_working_spend - terms_spoils_spend - cfg.slotting
+    profit_after_total_spend = profit_after_working_spend - terms_spoils_spend - inp.slotting
 
     # --- 9. Retail metrics ---
     everyday_retail_margin_pct = 1 - (everyday_net_cost / inp.base_price) if inp.base_price else 0
@@ -215,6 +235,7 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
         # Revenue
         "gross_sales":                      round(gross_sales, 2),
         "net_sales":                        round(net_sales, 2),
+        "defined_trade":                    round(defined_trade, 2),
         # Per-unit costs
         "everyday_net_cost":                round(everyday_net_cost, 4),
         "everyday_retail_margin_pct":       round(everyday_retail_margin_pct * 100, 2),
@@ -241,20 +262,20 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
 
 config = Config(
     number_of_stores=526,
-    velocity=3.2645707013362464,          # units/store/week (Distribution tab col L)
     seasonality_index=1.0194969362101305, # PG sheet row 7 col E
     weeks_in_period=4,
     terms_spoils_pct=0.046,
     distributor_program_pct=0.06,
     digital_sales_pct=0.0,
     other_program_pct=0.0,
-    slotting=0.0,
     constant_elasticity=-0.96,            # not used — price_impact_manual is set below
     current_base_price=38.99,             # not used — price_impact_manual is set below
 )
 
 inputs = ScenarioInputs(
     acv_pct=0.9952168461538463,           # 99.52% (Distribution tab col P = P01)
+    velocity=3.2645707013362464,          # units/store/week (Distribution tab col L)
+    slotting=0.0,
 
     base_price=38.99,
     gross_price=25.47,

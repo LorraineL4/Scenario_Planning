@@ -55,11 +55,10 @@
 
     "Distribution": {
       "type": "input",
-      "purpose": "Per-SKU ACV distribution %, velocity data, pipeline, and slotting by period",
+      "purpose": "Per-SKU velocity data, pipeline, and slotting by period. ACV % is now a scenario input (see product_group_row_map.inputs.distribution).",
       "structure": "one row per SKU",
       "key_columns": {
         "A":    { "field": "sku_name" },
-        "P-AB": { "field": "acv_pct_by_period", "periods": "P01-P13" },
         "AV-BH":{ "field": "oracle_prob_weighted_acv", "periods": "P01-P13" },
         "AD":   { "field": "new_distribution_change_probability" },
         "AF":   { "field": "pipeline_cases_per_store" },
@@ -71,8 +70,8 @@
         "AO":   { "field": "slotting_cases_per_store" }
       },
       "derived": {
-        "tdp": "acv_pct × number_of_stores",
-        "distribution_baseline": "SUMIFS(velocity, sku, period) × TDP"
+        "tdp": "scenario.acv_pct × number_of_stores",
+        "distribution_baseline": "velocity[sku] × TDP"
       }
     },
 
@@ -166,7 +165,8 @@
       "buyout_amount_promo2":        { "row": 91,  "section": "promo2",    "per_period": true,  "type": "currency" },
       "brick_promo2":                { "row": 93,  "section": "promo2",    "per_period": true,  "type": "currency" },
       "cogs":                        { "row": 147, "section": "cost",      "per_period": true,  "type": "currency" },
-      "case_count":                  { "row": 148, "section": "cost",      "per_period": false, "type": "integer" }
+      "case_count":                  { "row": 148, "section": "cost",      "per_period": false, "type": "integer" },
+      "acv_pct":                     { "section": "distribution", "per_period": true,  "type": "percent",  "note": "ACV distribution % per period. Drives TDP = acv_pct × number_of_stores" }
     },
 
     "outputs": {
@@ -221,7 +221,7 @@
   "formulas": {
     "baseline_full": {
       "formula": "distribution_baseline × (1 + price_elasticity_impact) × (1 + misc_impact_pct) × seasonality_index",
-      "dependencies": ["Distribution sheet", "Sales Rates (elasticity)", "seasonality_index (row 7)"]
+      "dependencies": ["acv_pct (scenario input)", "Sales Rates (elasticity)", "seasonality_index (row 7)"]
     },
     "price_elasticity_impact": {
       "formula": "IF(price_impact_manual IS SET, price_impact_manual, (new_edp / current_edp)^elasticity − 1)",
@@ -276,7 +276,19 @@
       "formula": "profit_after_working_spend − terms_spoils_spend − slotting_prob_weighted"
     },
     "net_sales": {
-      "formula": "gross_sales − total_spend_all"
+      "formula": "gross_sales − defined_trade"
+    },
+    "defined_trade": {
+      "formula": "sum of components selected by Config.net_sales_trade_components",
+      "components": [
+        "retailer_working_spend",
+        "distributor_working",
+        "digital_sales_spend",
+        "other_spend",
+        "terms_spoils_spend",
+        "slotting"
+      ],
+      "default": "all six components (equals total_spend_all)"
     },
     "distributor_working_spend": {
       "formula": "gross_sales × distributor_program_pct",

@@ -11,7 +11,7 @@ Machine-readable structure: `packages/engine/dap-reference.json`
 | Sheet | Type | Purpose |
 |---|---|---|
 | Account Info | Input | Account-level rates and configuration |
-| Distribution | Input | Per-SKU ACV %, velocity, pipeline, slotting by period |
+| Distribution | Input | Per-SKU velocity, pipeline, and slotting by period (ACV % moved to scenario input) |
 | Sales Rates | Lookup | Channel × Product × Price Point → Sales Rate + Elasticity |
 | `[Product Group]` (~40 sheets) | Calc | Per-SKU financial model for 12 fiscal periods |
 | Total | Aggregation | Flat DB pulling every metric from every PG sheet |
@@ -130,6 +130,12 @@ Same field structure as Promo 1. Field codes use `_promo2` suffix.
 | 147 | `cogs` | Cost of Goods per unit |
 | 148 | `case_count` | Units per case (for standard case conversion) |
 
+#### Distribution (scenario input)
+
+| Field Code | Description | Data Type |
+|---|---|---|
+| `acv_pct` | ACV distribution % per period (P01–P12). Drives `TDP = acv_pct × number_of_stores` | % per period |
+
 ### Row Map — Outputs / Calculated Fields
 
 #### Volume (rows 96–106)
@@ -225,7 +231,9 @@ Baseline(period) = Distribution_Baseline(period)
                  × Seasonality_Index(period)
 ```
 
-`Distribution_Baseline` is pulled from the Distribution sheet via SUMIFS keyed on SKU and period.
+`Distribution_Baseline = velocity × TDP`, where:
+- **velocity** — per-store sales rate per SKU; scenario input (Distribution tab col L), entered per scenario
+- **TDP** = `scenario_acv_pct × number_of_stores` — TDP is scenario-specific because `acv_pct` is a user input entered per scenario per period
 
 **Price Elasticity Impact (row 14 / 191):**
 - If `price_impact` (row 13) is manually entered → use that value directly
@@ -321,7 +329,13 @@ Incremental_Profit_After_Trade = Incremental_Gross − (Incremental_Units × cog
 Profit_After_Working_Spend    = Base_Profit + Incremental_Profit_After_Trade
                                − brick − Distributor_Working − Digital − Other
 Profit_After_Total_Spend      = Profit_After_Working_Spend − T&S − Slotting
-Net_Sales                     = Gross_Sales − Total_Spend
+Net_Sales                     = Gross_Sales − Defined_Trade
+
+Defined_Trade = sum of components in Config.net_sales_trade_components.
+Default includes all six (retailer_working_spend, distributor_working,
+digital_sales_spend, other_spend, terms_spoils_spend, slotting),
+which equals Total_Spend. Total_Spend is always computed and drives
+allin_trade_rate_pct regardless of this setting.
 ```
 
 ---
@@ -363,7 +377,6 @@ One row per SKU. Key columns:
 | Column Range | Data |
 |---|---|
 | A | SKU / Product Group name |
-| P–AB (P01–P13) | ACV distribution % by period |
 | AV–BH | Oracle probability-weighted ACV by period |
 | AD | New distribution change probability |
 | AF | Cases per Store (for pipeline calc) |
@@ -374,8 +387,10 @@ One row per SKU. Key columns:
 | AN | Slotting per store $ |
 | AO | Cases per Store for slotting |
 
-**TDP calc:** `TDP = ACV% × Number_of_Stores`  
-**Distribution Baseline** pulled into PG sheet via: `SUMIFS(Distribution[velocity], [SKU], sku_name, [Period], period) × TDP`
+**Velocity** (`Distribution[velocity]`, col L) — per-store sales rate per SKU; scenario input, entered per scenario alongside `acv_pct`.  
+**Slotting** (`Distribution[slotting_lump_sum]`, col AM) — lump sum per period; scenario input.  
+**TDP calc:** `TDP = scenario_acv_pct × Number_of_Stores`  
+**Distribution Baseline:** `velocity[sku] × TDP`
 
 ---
 
@@ -408,3 +423,28 @@ Trade Summary / PG Summary / Distribution Summary
 | Quarters rounding lookup table | Stored in Helpers columns A–B; boundary values not fully extracted |
 | Fixed Fee Calculator allocation | Proportional to baseline gross sales share across SKUs; used for lump-sum events |
 | Scenario (alpha) sheet logic | Not replicated — being replaced by this web app |
+
+
+## Domain Vocabulary
+
+| Term | Meaning |
+|---|---|
+| DAP | Account Planning Excel workbook (the source model) |
+| PG / Product Group | A single SKU's planning sheet within the DAP |
+| TDP | Total Distribution Points (stores × ACV%) |
+| ACV | All Commodity Volume — distribution coverage % |
+| T&S | Terms & Spoils — non-working trade (shrinkage, returns) |
+| Scan / BB | Bill-Back — per-unit payment to retailer during a promo |
+| MCB | Market Conduct Bill-back — distributor program funding |
+| EDLP / EDLC | Every Day Low Price / Cost — everyday pricing subsidization |
+| Working Trade | Spend tied directly to a consumer event (scan, display, ad) |
+| Non-Working Trade | Spend not tied to an event (T&S, distributor programs) |
+| Gross Price | Manufacturer's invoice price to distributor (not shelf price) |
+| Net Sales | Gross Sales − Defined Trade (sum of trade components selected by Config.net_sales_trade_components; defaults to all six = Total Spend) |
+| Lift % | Volume uplift above baseline during a promo |
+| Baseline | Expected velocity with no promo, adjusted for price + seasonality |
+
+## Critical Model Rules
+
+- **MCB has two upcharge perspectives** — credit to retailer uses distributor upcharge (~8%); cost to manufacturer uses catalog upcharge (~48%). Never mix them. See `DAP_METHODOLOGY.md`.
+- **Admin fees are excluded from retailer margin %** but do reduce manufacturer profit.
