@@ -90,7 +90,7 @@ PG_PERIOD_INPUTS = {
     "base_price":               {"row": 10},
     "gross_price":              {"row": 11},
     "edlp_direct":              {"row": 12},
-    "price_impact_manual":      {"row": 14},
+    "price_impact_manual":      {"row": 13},
     "edlp_mcb_pct":             {"row": 25},
     "misc_impact_pct":          {"row": 31},
     # Promo slot 1
