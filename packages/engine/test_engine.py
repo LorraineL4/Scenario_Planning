@@ -201,8 +201,11 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     )
     net_sales = gross_sales - defined_trade
 
-    # Incremental spend (for ROI calc — variable per-unit portion only)
-    incremental_spend = incremental_units_1 * per_unit_cost_mfr_1 + incremental_units_2 * per_unit_cost_mfr_2
+    # Incremental spend: promo_units × promo_scan + incremental_units × EDLP
+    incremental_spend = (
+        promo_units_1 * per_unit_cost_mfr_1 + incremental_units_1 * edlp_cost_per_unit
+        + promo_units_2 * per_unit_cost_mfr_2 + incremental_units_2 * edlp_cost_per_unit
+    )
 
     # --- 8. Profit layers ---
     total_cogs = unit_sales * inp.cogs
@@ -213,10 +216,9 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
         gross_sales - retailer_working_spend - total_cogs
         - distributor_working - digital_sales_spend - other_spend
     )
-    # Derived to match Excel row 131 (used for promo ROI display)
+    # DAP row 131: incremental_gross - incremental_cogs - incremental_spend
     incremental_profit_after_trade = (
-        profit_after_working_spend + distributor_working + digital_sales_spend + other_spend
-        - base_profit + brick
+        incremental_gross - (incremental_units * inp.cogs) - incremental_spend
     )
     profit_after_total_spend = profit_after_working_spend - terms_spoils_spend - inp.slotting
 
