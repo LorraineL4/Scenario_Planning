@@ -7,7 +7,9 @@ Only overwrites fields the app manages:
 
 Everything else in the workbook is untouched.
 """
+import io
 import re
+import zipfile
 from pathlib import Path
 import openpyxl
 
@@ -33,6 +35,46 @@ def _safe_name(s: str) -> str:
     return re.sub(r'[\\/:*?"<>|]', '-', s).strip()
 
 
+def _build_sku_row_map(source_xlsx: Path) -> dict[str, int]:
+    """
+    Open the workbook with data_only=True so HYPERLINK formula cells in col B
+    return their cached display text (the SKU name) rather than the formula string.
+    Returns {sku_name: row_number}.
+    """
+    wb = openpyxl.load_workbook(source_xlsx, data_only=True)
+    sku_row: dict[str, int] = {}
+    if "Distribution" not in wb.sheetnames:
+        return sku_row
+    ws = wb["Distribution"]
+    for row in ws.iter_rows(min_row=_DIST_DATA_START_ROW):
+        cell_b = row[_DIST_COL_SKU_NAME - 1]
+        raw = cell_b.value
+        if not isinstance(raw, str) or not raw.strip():
+            continue
+        name = raw.strip()
+        if any(kw in name.upper() for kw in _DIST_HEADER_KEYWORDS):
+            continue
+        sku_row.setdefault(name, cell_b.row)
+    wb.close()
+    return sku_row
+
+
+def _strip_calc_chain(path: Path) -> None:
+    """
+    Remove xl/calcChain.xml from the saved workbook ZIP so Excel rebuilds
+    the calculation chain from scratch on open.  Without this, openpyxl's
+    stale calcChain can cause formula errors after cell writes.
+    """
+    buf = io.BytesIO()
+    with zipfile.ZipFile(path, "r") as zin:
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zout:
+            for item in zin.infolist():
+                if item.filename == "xl/calcChain.xml":
+                    continue
+                zout.writestr(item, zin.read(item.filename))
+    path.write_bytes(buf.getvalue())
+
+
 def write_dap(
     source_xlsx: Path,
     scenario_name: str,
@@ -54,33 +96,24 @@ def write_dap(
         Dict of ``"sku_name|||P01"`` → ``{name, promo_price, weeks, scan,
         fixed_fee, expected_lift}``.  ``expected_lift`` is a % integer (44 → 1.44).
     fiscal_calendar
-        ``{"P01": {"month": "Jul", ...}, ...}``  — ordered dict, preserving
-        fiscal year sequence so we can map month name → period → column offset.
+        ``{"P01": {"month": "Jul", ...}, ...}``  — ordered dict preserving
+        fiscal year sequence, used to map month name → period → column offset.
     """
+    # Build SKU→row map using data_only=True so HYPERLINK cells resolve correctly.
+    sku_row = _build_sku_row_map(source_xlsx) if distribution_rows else {}
+
+    # Open with data_only=False to preserve all formulas while writing values.
     wb = openpyxl.load_workbook(source_xlsx, data_only=False)
 
-    # Build mapping helpers from the fiscal calendar (preserve insertion order = fiscal order)
-    month_to_period  = {info["month"]: p for p, info in fiscal_calendar.items() if info.get("month")}
+    # Mapping helpers from the fiscal calendar
+    month_to_period   = {info["month"]: p for p, info in fiscal_calendar.items() if info.get("month")}
     period_col_offset = {p: i for i, p in enumerate(fiscal_calendar.keys())}
 
     # ── 1. Distribution sheet ──────────────────────────────────────────────────
     if distribution_rows and "Distribution" in wb.sheetnames:
         ws_dist = wb["Distribution"]
-
-        # Map SKU/item name → Excel row number (first occurrence)
-        sku_row: dict[str, int] = {}
-        for row in ws_dist.iter_rows(min_row=_DIST_DATA_START_ROW):
-            cell_b = row[_DIST_COL_SKU_NAME - 1]
-            raw = cell_b.value
-            if not isinstance(raw, str) or not raw.strip():
-                continue
-            name = raw.strip()
-            if any(kw in name.upper() for kw in _DIST_HEADER_KEYWORDS):
-                continue
-            sku_row.setdefault(name, cell_b.row)
-
         for dr in distribution_rows:
-            sku_name = dr.get("SKU_name") or dr.get("sku_name", "")
+            sku_name  = dr.get("SKU_name") or dr.get("sku_name", "")
             excel_row = sku_row.get(sku_name)
             if excel_row is None:
                 continue
@@ -95,7 +128,6 @@ def write_dap(
 
     # ── 2. PG sheets (promo slot 1) ────────────────────────────────────────────
     if promo_grid:
-        # Build a case-insensitive sheet name lookup once
         sheet_map = {s.lower(): s for s in wb.sheetnames}
 
         for cell_key, promo in promo_grid.items():
@@ -112,9 +144,14 @@ def write_dap(
                 continue
             ws_pg = wb[actual_name]
 
-            def _write(row, value):
-                if value is not None:
-                    ws_pg.cell(row=row, column=col).value = value
+            def _write(row, value, _ws=ws_pg, _col=col):
+                if value is None:
+                    return
+                cell = _ws.cell(row=row, column=_col)
+                # Never overwrite a formula cell
+                if isinstance(cell.value, str) and cell.value.startswith("="):
+                    return
+                cell.value = value
 
             _write(_PROMO1_ROWS["name"],  promo.get("name"))
             _write(_PROMO1_ROWS["price"], _float(promo.get("promo_price")))
@@ -124,10 +161,19 @@ def write_dap(
             if promo.get("expected_lift") is not None:
                 _write(_PROMO1_ROWS["lift"], 1.0 + float(promo["expected_lift"]) / 100.0)
 
-    # ── 3. Save ────────────────────────────────────────────────────────────────
+    # ── 3. Save & clean up calcChain ───────────────────────────────────────────
+    # Tell Excel to fully recalculate on open (belt-and-suspenders alongside
+    # the calcChain strip below).
+    wb.calculation.fullCalcOnLoad = True
+
     out_dir  = output_dir or source_xlsx.parent
     out_path = out_dir / f"{source_xlsx.stem}-{_safe_name(scenario_name)}.xlsx"
     wb.save(out_path)
+
+    # Strip the stale calcChain so Excel rebuilds it cleanly rather than trying
+    # to reconcile openpyxl's leftover chain against our modified cells.
+    _strip_calc_chain(out_path)
+
     return out_path
 
 
