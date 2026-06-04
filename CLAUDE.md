@@ -78,3 +78,38 @@ Full formula details: `DAP_METHODOLOGY.md §4` | Field index: `packages/engine/d
 **Push policy**
 - Always ask before pushing to GitHub unless explicitly told to push
 - Never force-push to `main`
+
+## Engine Testing
+
+To validate the engine against a real DAP file, run the four commands below in order. The DAP file must be in `data/raw/` (gitignored).
+
+**Step 1 — Extract data from the DAP file**
+
+```bash
+python packages/engine/extract_config.py  "data/raw/<DAP file>.xlsx" --output data/processed/config.json
+python packages/engine/extract_inputs.py  "data/raw/<DAP file>.xlsx" --output data/processed/inputs.json
+python packages/engine/extract_expected.py "data/raw/<DAP file>.xlsx" --output data/processed/expected.json
+```
+
+| Script | What it extracts |
+|---|---|
+| `extract_config.py` | Static account/SKU data: stores, seasonality, sales rates, COGS, case count |
+| `extract_inputs.py` | Per-period scenario inputs: ACV%, velocity, pricing, promo slots |
+| `extract_expected.py` | Excel-computed outputs (ground truth): unit sales, gross sales, spend, profit |
+
+All three write to `data/processed/` (gitignored — contains client data).
+
+**Step 2 — Run the comparison**
+
+```bash
+python packages/engine/test_from_json.py
+# or narrow scope:
+python packages/engine/test_from_json.py --sku "SKU name"
+python packages/engine/test_from_json.py --sku "SKU name" --period P01
+```
+
+**Interpreting results**
+
+- Each SKU prints `OK` or `FAIL`; failures show field name, engine value, Excel value, and diff
+- Tolerances: ±0.5 for unit-count fields; ±0.02 for all dollar/rate fields
+- `total_spend` and `profit_after_total_spend` are currently skipped (not yet fully implemented)
