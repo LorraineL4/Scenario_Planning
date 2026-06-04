@@ -204,6 +204,11 @@ export default function PricingView({
   const [editing,     setEditing]     = useState(null)   // { sku, field, period }
   const [edited,      setEdited]      = useState(() => new Set())
   const [activeBlock, setActiveBlock] = useState(null)
+  const [history,     setHistory]     = useState([])
+  const _pricingDataRef = useRef({})
+  const _editedRef      = useRef(new Set())
+  useEffect(() => { _pricingDataRef.current = pricingData }, [pricingData])
+  useEffect(() => { _editedRef.current = edited }, [edited])
 
   useEffect(() => {
     onDraftChange?.(activeBlock || edited.size > 0 ? pricingData : null)
@@ -228,6 +233,7 @@ export default function PricingView({
     }
     setEdited(new Set())
     setEditing(null)
+    setHistory([])
   }, [devData, periods, basePricingSnapshot])  // eslint-disable-line
 
   // ── Derived ───────────────────────────────────────────────────────────────
@@ -252,6 +258,11 @@ export default function PricingView({
     if (!fieldDef) return
     const value = parseVal(fieldDef.type, raw)
 
+    setHistory(h => [...h.slice(-49), {
+      pricingData: JSON.parse(JSON.stringify(_pricingDataRef.current)),
+      edited: new Set(_editedRef.current),
+    }])
+
     setPricingData(data => {
       const sku = { ...data[skuName], periods: { ...data[skuName]?.periods } }
       if (field === 'upcharge_dist_pct') {
@@ -271,6 +282,10 @@ export default function PricingView({
   }, [])
 
   const applyPricingRange = useCallback((skuName, targetPeriods, values) => {
+    setHistory(h => [...h.slice(-49), {
+      pricingData: JSON.parse(JSON.stringify(_pricingDataRef.current)),
+      edited: new Set(_editedRef.current),
+    }])
     setPricingData(data => {
       const sku = { ...data[skuName], periods: { ...data[skuName]?.periods } }
       const { upcharge_dist_pct, ...otherValues } = values
@@ -313,6 +328,27 @@ export default function PricingView({
 
     return { _weekly_baseline: weeklyBaseline, _ed_nuc: edNuc, _retail_margin: retailMargin }
   }, [pricingData, devData, fiscalCalendar])
+
+  // ── Undo ─────────────────────────────────────────────────────────────────
+
+  const handleUndo = useCallback(() => {
+    if (!history.length) return
+    const snap = history[history.length - 1]
+    setPricingData(snap.pricingData)
+    setEdited(snap.edited)
+    setHistory(h => h.slice(0, -1))
+  }, [history])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleUndo])
 
   // ── Save / load ───────────────────────────────────────────────────────────
 
@@ -391,6 +427,7 @@ export default function PricingView({
             <input placeholder="Search SKU…" value={search} onChange={e => setSearch(e.target.value)} />
             {search && <button className="search-x" onClick={() => setSearch('')}>✕</button>}
           </div>
+          <button className="btn sm" onClick={handleUndo} disabled={history.length === 0}>Undo</button>
           <button className="btn sm" onClick={() => setSaveModalOpen(true)}>Save</button>
         </div>
       </div>

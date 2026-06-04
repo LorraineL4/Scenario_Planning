@@ -186,6 +186,11 @@ export default function DistributionEditor({
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock)
   const [editing, setEditing]   = useState(null)
   const [edited, setEdited]     = useState(() => new Set())
+  const [history, setHistory]   = useState([])
+  const _rowsRef    = useRef([])
+  const _editedRef  = useRef(new Set())
+  useEffect(() => { _rowsRef.current = rows }, [rows])
+  useEffect(() => { _editedRef.current = edited }, [edited])
 
   // Only send draft rows when a block is loaded or edits exist — otherwise let
   // the backend use its raw inputs.json to avoid rounding drift from devDataToRows.
@@ -218,6 +223,10 @@ export default function DistributionEditor({
   const commitCell = useCallback((rowId, field, raw) => {
     setEditing(null)
     if (raw === null || raw === undefined) return
+    setHistory(h => [...h.slice(-49), {
+      rows: _rowsRef.current.map(r => ({ ...r, months: { ...r.months } })),
+      edited: new Set(_editedRef.current),
+    }])
     setRows(rs => rs.map(r => {
       if (r.id !== rowId) return r
       const nr = { ...r }
@@ -233,6 +242,10 @@ export default function DistributionEditor({
   }, [])
 
   const applyRange = useCallback((rowId, start, end, value) => {
+    setHistory(h => [...h.slice(-49), {
+      rows: _rowsRef.current.map(r => ({ ...r, months: { ...r.months } })),
+      edited: new Set(_editedRef.current),
+    }])
     const si = months.indexOf(start), ei = months.indexOf(end)
     setRows(rs => rs.map(r => {
       if (r.id !== rowId) return r
@@ -254,6 +267,7 @@ export default function DistributionEditor({
     setEdited(new Set())
     setEditing(null)
     setPopover(null)
+    setHistory([])
     onBlockChange?.('__base__')
   }, [baseRows, onBlockChange])
 
@@ -263,6 +277,7 @@ export default function DistributionEditor({
     setEdited(new Set())
     setEditing(null)
     setPopover(null)
+    setHistory([])
     onBlockChange?.(block.id)
   }, [onBlockChange])
 
@@ -287,6 +302,25 @@ export default function DistributionEditor({
     }
     setSaveModalOpen(false)
   }
+
+  const handleUndo = useCallback(() => {
+    if (!history.length) return
+    const snap = history[history.length - 1]
+    setRows(snap.rows)
+    setEdited(snap.edited)
+    setHistory(h => h.slice(0, -1))
+  }, [history])
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleUndo])
 
   // Present "Base Distribution" as a named block so SaveModal always shows the
   // choice box — mirrors how the main distribution tab works in App.jsx.
@@ -317,6 +351,7 @@ export default function DistributionEditor({
             <input placeholder="Search SKU or product group…" value={search} onChange={(e) => setSearch(e.target.value)} />
             {search && <button className="search-x" onClick={() => setSearch('')}>✕</button>}
           </div>
+          <button className="btn sm" onClick={handleUndo} disabled={history.length === 0}>Undo</button>
           <button className="btn sm" onClick={() => setSaveModalOpen(true)}>Save</button>
         </div>
       </div>

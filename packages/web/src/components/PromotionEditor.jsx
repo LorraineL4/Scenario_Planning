@@ -149,6 +149,7 @@ export default function PromotionEditor({
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock || null)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [hasEdits, setHasEdits] = useState(false)
+  const [history, setHistory]         = useState([])
 
   useEffect(() => {
     onDraftChange?.(activeBlock || hasEdits ? { grid, promos } : null)
@@ -182,12 +183,14 @@ export default function PromotionEditor({
   const loadBase = () => {
     setGrid({ ...baseGrid }); setPromos([...basePromos])
     setActiveBlock(null); setHasEdits(false); setFormOpen(false); setMode('idle')
+    setHistory([])
     onBlockChange?.('__base__')
   }
 
   const loadBlock = (block) => {
     setGrid({ ...(block.inputs?.grid || {}) }); setPromos([...(block.inputs?.promos || [])])
     setActiveBlock(block); setHasEdits(false); setFormOpen(false); setMode('idle')
+    setHistory([])
     onBlockChange?.(block.id)
   }
 
@@ -232,6 +235,7 @@ export default function PromotionEditor({
 
   function handleAddToCell() {
     if (!editingKey) return
+    setHistory(h => [...h.slice(-49), { grid: JSON.parse(JSON.stringify(grid)), promos: [...promos] }])
     const name = formValues.name.trim()
     const existing = promos.find(p => p.name === name)
     const colorIdx = existing ? existing.colorIdx : promos.length
@@ -250,6 +254,7 @@ export default function PromotionEditor({
 
   function handleUpdateCell() {
     if (!editingKey) return
+    setHistory(h => [...h.slice(-49), { grid: JSON.parse(JSON.stringify(grid)), promos: [...promos] }])
     setGrid(g => ({ ...g, [editingKey]: { ...(g[editingKey] || {}), name: formValues.name.trim(), promo_price: parseFloat(formValues.promo_price) || 0, weeks: parseInt(formValues.weeks) || 0, scan: parseFloat(formValues.scan) || 0, fixed_fee: parseFloat(formValues.fixed_fee) || 0, expected_lift: parseFloat(formValues.expected_lift) || 0 } }))
     setHasEdits(true); setFormOpen(false); setMode('idle'); setEditingKey(null)
   }
@@ -262,17 +267,38 @@ export default function PromotionEditor({
 
   function handlePopulate() {
     if (!pendingPromo || !selectedCells.size) return
+    setHistory(h => [...h.slice(-49), { grid: JSON.parse(JSON.stringify(grid)), promos: [...promos] }])
     setGrid(g => { const next = { ...g }; for (const k of selectedCells) next[k] = { ...pendingPromo, id: `promo-${Date.now()}-${k}` }; return next })
     setHasEdits(true); setSelectedCells(new Set()); setPendingPromo(null); setMode('idle')
   }
 
   function handleRemoveCell() {
     if (!editingKey) return
+    setHistory(h => [...h.slice(-49), { grid: JSON.parse(JSON.stringify(grid)), promos: [...promos] }])
     setGrid(g => { const next = { ...g }; delete next[editingKey]; return next })
     setHasEdits(true); setFormOpen(false); setMode('idle'); setEditingKey(null)
   }
 
   const selecting = mode === 'selecting'
+
+  function handleUndo() {
+    if (!history.length) return
+    const snap = history[history.length - 1]
+    setGrid(snap.grid)
+    setPromos(snap.promos)
+    setHistory(h => h.slice(0, -1))
+  }
+
+  useEffect(() => {
+    const onKey = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault()
+        handleUndo()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [history]) // eslint-disable-line
 
   // ── Render ────────────────────────────────────────────────────────────────
 
@@ -309,6 +335,7 @@ export default function PromotionEditor({
           )}
         </div>
         <div className="bar-right">
+          <button className="btn sm" onClick={handleUndo} disabled={history.length === 0}>Undo</button>
           <button className="btn sm" onClick={() => setSaveModalOpen(true)}>Save</button>
         </div>
       </div>
