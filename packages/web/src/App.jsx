@@ -218,6 +218,8 @@ export default function App() {
   const [baseRows, setBaseRows]     = useState(null);
   const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
+  const [pendingPricingBlock, setPendingPricingBlock]     = useState(null);
+  const [pendingPromotionBlock, setPendingPromotionBlock] = useState(null);
   const [activeIsBase, setActiveIsBase] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
@@ -740,6 +742,17 @@ export default function App() {
     setBlocks(b => ({ ...b, promotion: [...b.promotion, newBlock] }));
   }, []);
 
+  const overwritePromotionBlock = useCallback((blockId, state) => {
+    setBlocks(b => ({
+      ...b,
+      promotion: b.promotion.map(bl =>
+        bl.id === blockId
+          ? { ...bl, inputs: state, note: `${Object.keys(state.grid || {}).length} cells · saved` }
+          : bl
+      ),
+    }));
+  }, []);
+
   useEffect(() => {
     const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
     if (!acctKey) return;
@@ -900,6 +913,7 @@ export default function App() {
           devData={devData}
           fiscalCalendar={fiscalCalendar}
           blocks={blocks.pricing}
+          initialActiveBlock={pendingPricingBlock}
           onSaveNew={savePricingBlock}
           onOverwrite={overwritePricingBlock}
         />
@@ -907,7 +921,18 @@ export default function App() {
 
       {/* ── Promotion tab ── */}
       {view === 'promotion' && (
-        <PromotionView rows={rows} fiscalCalendar={fiscalCalendar} accountKey={acctKey} planPromos={planPromos} />
+        <PromotionView
+          rows={rows}
+          fiscalCalendar={fiscalCalendar}
+          blocks={(blocks.promotion || []).filter(b => b.id !== '__base__')}
+          baseGrid={planPromos?.grid || {}}
+          basePromos={planPromos?.promos || []}
+          initialGrid={pendingPromotionBlock ? pendingPromotionBlock.inputs?.grid || {} : planPromos?.grid || {}}
+          initialPromos={pendingPromotionBlock ? pendingPromotionBlock.inputs?.promos || [] : planPromos?.promos || []}
+          initialActiveBlock={pendingPromotionBlock}
+          onSaveNew={createPromotionBlock}
+          onOverwrite={overwritePromotionBlock}
+        />
       )}
 
       {/* ── Compare tab ── */}
@@ -927,6 +952,10 @@ export default function App() {
             onDeleteBase={() => setShowBasePlan(false)}
             onEditBlock={(block) => { loadBlock(block); setView('distribution'); }}
             onEditBase={() => { loadBase(); setActiveIsBase(true); setView('distribution'); }}
+            onEditPricingBase={() => { setPendingPricingBlock(null); setView('pricing'); }}
+            onEditPricingBlock={(block) => { setPendingPricingBlock(block); setView('pricing'); }}
+            onEditPromotionBase={() => { setPendingPromotionBlock(null); setView('promotion'); }}
+            onEditPromotionBlock={(block) => { setPendingPromotionBlock(block); setView('promotion'); }}
           />
         </div>
       )}
