@@ -382,16 +382,23 @@ export default function App() {
 
   const planPromos = useMemo(() => {
     if (!devData) return { grid: {}, promos: [] };
+    // Build SKU→ProductGroup mapping from baseRows
+    const skuToGroup = {};
+    for (const r of baseRows || []) skuToGroup[r.SKU_name] = r.Product_Group;
     const nameToColor = new Map();
     const grid = {};
     for (const [skuName, skuData] of Object.entries(devData.skus || {})) {
+      const pg = skuToGroup[skuName];
+      if (!pg) continue;
       for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
         const name  = pdata.name_promo1;
         const weeks = pdata.weeks_event_promo1;
         if (!name || !weeks) continue;
+        const key = `${pg}|||${period}`;
+        if (grid[key]) continue; // first SKU in group wins
         if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
         const lift = pdata.lift_promo1;
-        grid[`${skuName}|||${period}`] = {
+        grid[key] = {
           id:            `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}`,
           colorIdx:      nameToColor.get(name),
           name,
@@ -409,7 +416,7 @@ export default function App() {
       name,
     }));
     return { grid, promos };
-  }, [devData]);
+  }, [devData, baseRows]);
 
   // ── Building block actions ────────────────────────────────────────────────
 
@@ -587,6 +594,17 @@ export default function App() {
           : bl
       ),
     }));
+  }, []);
+
+  const createPromotionBlock = useCallback((name, state) => {
+    const newBlock = {
+      id: `promo-${Date.now()}`,
+      name,
+      note: `${Object.keys(state.grid || {}).length} cells · saved`,
+      created_at: new Date().toISOString(),
+      inputs: state,
+    };
+    setBlocks(b => ({ ...b, promotion: [...b.promotion, newBlock] }));
   }, []);
 
   useEffect(() => {
@@ -783,12 +801,19 @@ export default function App() {
             scenarios={showBasePlan ? scenarios : []}
             savedScenarios={savedScenarios}
             blocks={blocks}
+            devData={devData}
             baseRows={baseRows}
+            fiscalCalendar={fiscalCalendar}
+            basePromoState={planPromos}
             onNewScenario={() => setView('new-scenario')}
             onDeleteScenario={deleteScenario}
             onUpdateScenario={updateScenario}
             onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
             onCreateDistributionBlock={createDistributionBlock}
+            onSavePromotion={(blockId, state) => updateBlockInputs('promotion', blockId, state)}
+            onCreatePromotionBlock={createPromotionBlock}
+            onSavePricing={(blockId, snapshot) => updateBlockInputs('pricing', blockId, snapshot)}
+            onCreatePricingBlock={savePricingBlock}
           />
         </div>
       )}

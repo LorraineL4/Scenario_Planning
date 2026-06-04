@@ -189,6 +189,7 @@ export default function PricingView({
   devData,
   fiscalCalendar = {},
   blocks = [],
+  initialActiveBlock = null,
   onSaveNew,
   onOverwrite,
   onBlockChange,
@@ -209,12 +210,19 @@ export default function PricingView({
 
   useEffect(() => {
     if (!devData) return
-    const data = initFromDevData(devData, periods)
-    setPricingData(data)
-    setCollapsed(new Set(Object.keys(data)))   // start all collapsed
+    if (initialActiveBlock) {
+      const data = JSON.parse(JSON.stringify(initialActiveBlock.inputs || {}))
+      setPricingData(data)
+      setActiveBlock(initialActiveBlock)
+      setCollapsed(new Set(Object.keys(data)))
+    } else {
+      const data = initFromDevData(devData, periods)
+      setPricingData(data)
+      setCollapsed(new Set(Object.keys(data)))
+    }
     setEdited(new Set())
     setEditing(null)
-  }, [devData, periods])
+  }, [devData, periods])  // eslint-disable-line
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -349,6 +357,7 @@ export default function PricingView({
           <PlanDropdown
             activeBlock={activeBlock}
             blocks={blocks}
+            baseLabel="Base Pricing"
             onSelectBase={loadBase}
             onSelectBlock={loadBlock}
           />

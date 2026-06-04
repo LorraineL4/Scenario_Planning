@@ -98,7 +98,7 @@ export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite
 
 // ─── Plan dropdown ────────────────────────────────────────────────────────────
 
-export function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
+export function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock, baseLabel = 'Base Distribution' }) {
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
   useEffect(() => {
@@ -108,7 +108,7 @@ export function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock 
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const label = activeBlock ? activeBlock.name : 'Base Distribution'
+  const label = activeBlock ? activeBlock.name : baseLabel
   const btnStyle = {
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
     borderRadius: 7, border: '1px solid var(--line)',
@@ -141,7 +141,7 @@ export function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock 
         }}>
           <div style={{ padding: '6px 4px' }}>
             <button onClick={() => { onSelectBase(); setOpen(false) }} style={itemStyle(!activeBlock)}>
-              <span style={{ flex: 1 }}>Base Distribution</span>
+              <span style={{ flex: 1 }}>{baseLabel}</span>
               {!activeBlock && <span style={{ fontSize: 11, fontWeight: 700 }}>current</span>}
             </button>
             {blocks.length > 0 && (

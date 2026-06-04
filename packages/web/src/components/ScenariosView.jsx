@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { tagColor, Dot, Icon } from './ui.jsx'
 import DistributionEditor from './DistributionEditor.jsx'
+import PromotionEditor from './PromotionEditor.jsx'
+import PricingView from './PricingView.jsx'
 
 const fmt$ = (v) => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 const fmtPct = (v) => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
@@ -30,13 +32,17 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario }) {
+function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
   const isBase = scenario?._isBase === true
-  const savedDistId = scenario?.distributionId || '__base__'
-  const [pendingDistId, setPendingDistId] = useState(savedDistId)
+  const savedDistId    = scenario?.distributionId || '__base__'
+  const savedPromoId   = scenario?.promotionId    || '__base__'
+  const savedPricingId = scenario?.pricingId      || '__base__'
+  const [pendingDistId,    setPendingDistId]    = useState(savedDistId)
+  const [pendingPromoId,   setPendingPromoId]   = useState(savedPromoId)
+  const [pendingPricingId, setPendingPricingId] = useState(savedPricingId)
   const [computedFinancials, setComputedFinancials] = useState(null)
 
   useEffect(() => {
@@ -62,10 +68,17 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
       .catch((err) => console.error('[compute]', err))
   }, [pendingDistId])  // eslint-disable-line
 
-  const isDistDirty = pendingDistId !== savedDistId
+  const isDistDirty    = pendingDistId    !== savedDistId
+  const isPromoDirty   = pendingPromoId   !== savedPromoId
+  const isPricingDirty = pendingPricingId !== savedPricingId
+  const isDirty = isDistDirty || isPromoDirty || isPricingDirty
 
   const handleSaveScenario = () => {
-    if (isDistDirty) onUpdateScenario?.(scenario.id, { distributionId: pendingDistId })
+    const updates = {}
+    if (isDistDirty)    updates.distributionId = pendingDistId
+    if (isPromoDirty)   updates.promotionId    = pendingPromoId
+    if (isPricingDirty) updates.pricingId      = pendingPricingId
+    if (Object.keys(updates).length) onUpdateScenario?.(scenario.id, updates)
   }
 
   if (!scenario) {
@@ -81,6 +94,18 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
   const distBlock = (!distBlockId || distBlockId === '__base__')
     ? null
     : (blocks.distribution || []).find(b => b.id === distBlockId) || null
+
+  // Resolve the promotion block
+  const promoBlockId = scenario.promotionId || '__base__'
+  const promoBlock = (!promoBlockId || promoBlockId === '__base__')
+    ? null
+    : (blocks.promotion || []).find(b => b.id === promoBlockId) || null
+
+  // Resolve the pricing block
+  const pricingBlockId = scenario.pricingId || '__base__'
+  const pricingBlock = (!pricingBlockId || pricingBlockId === '__base__')
+    ? null
+    : (blocks.pricing || []).find(b => b.id === pricingBlockId) || null
 
   // Rows to seed the editor with
   const initialRows = distBlock ? distBlock.inputs : (baseRows || [])
@@ -149,25 +174,28 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
         )}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
           <div style={{ display: 'flex', gap: 20 }}>
-            {[['Distribution', scenario.distributionId], ['Pricing', scenario.pricingId], ['Promotion', scenario.promotionId]].map(([type, id]) => (
-              <div key={type} style={{ display: 'flex', gap: 5, fontSize: 12 }}>
-                <span style={{ color: 'var(--muted)' }}>{type}:</span>
-                <span style={{ fontWeight: 600, color: isDistDirty && type === 'Distribution' ? 'var(--navy)' : 'var(--ink-2)' }}>
-                  {type === 'Distribution' && pendingDistId && pendingDistId !== (scenario.distributionId || '__base__')
-                    ? blockLabel(pendingDistId, blocks, type)
-                    : blockLabel(id, blocks, type)}
-                </span>
-              </div>
-            ))}
+            {[['Distribution', scenario.distributionId], ['Pricing', scenario.pricingId], ['Promotion', scenario.promotionId]].map(([type, id]) => {
+              const pendingId = type === 'Distribution' ? pendingDistId : type === 'Promotion' ? pendingPromoId : type === 'Pricing' ? pendingPricingId : null
+              const dirty = type === 'Distribution' ? isDistDirty : type === 'Promotion' ? isPromoDirty : type === 'Pricing' ? isPricingDirty : false
+              const showPending = pendingId && pendingId !== (id || '__base__')
+              return (
+                <div key={type} style={{ display: 'flex', gap: 5, fontSize: 12 }}>
+                  <span style={{ color: 'var(--muted)' }}>{type}:</span>
+                  <span style={{ fontWeight: 600, color: dirty ? 'var(--navy)' : 'var(--ink-2)' }}>
+                    {showPending ? blockLabel(pendingId, blocks, type) : blockLabel(id, blocks, type)}
+                  </span>
+                </div>
+              )
+            })}
           </div>
           <button
             onClick={handleSaveScenario}
-            disabled={!isDistDirty}
+            disabled={!isDirty}
             style={{
               fontSize: 14, fontWeight: 700, padding: '7px 18px', borderRadius: 7, border: 'none',
-              background: isDistDirty ? '#dc2626' : 'var(--panel-2)',
-              color: isDistDirty ? '#fff' : 'var(--muted)',
-              cursor: isDistDirty ? 'pointer' : 'default',
+              background: isDirty ? '#dc2626' : 'var(--panel-2)',
+              color: isDirty ? '#fff' : 'var(--muted)',
+              cursor: isDirty ? 'pointer' : 'default',
               fontFamily: 'inherit', transition: 'background .15s, color .15s',
             }}
           >Save Scenario</button>
@@ -208,8 +236,34 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
           onBlockChange={setPendingDistId}
         />
       )}
-      {subTab === 'pricing' && <ComingSoonPanel label="Pricing" />}
-      {subTab === 'promotion' && <ComingSoonPanel label="Promotion" />}
+      {subTab === 'pricing' && (
+        <PricingView
+          key={scenario.id + '-pricing'}
+          devData={devData}
+          fiscalCalendar={fiscalCalendar}
+          blocks={blocks.pricing || []}
+          initialActiveBlock={pricingBlock}
+          onSaveNew={onCreatePricingBlock}
+          onOverwrite={(blockId, snapshot) => onSavePricing(blockId, snapshot)}
+          onBlockChange={setPendingPricingId}
+        />
+      )}
+      {subTab === 'promotion' && (
+        <PromotionEditor
+          key={scenario.id + '-promo'}
+          initialGrid={promoBlock?.inputs?.grid || basePromoState?.grid || {}}
+          initialPromos={promoBlock?.inputs?.promos || basePromoState?.promos || []}
+          initialActiveBlock={promoBlock}
+          blocks={blocks.promotion || []}
+          baseGrid={basePromoState?.grid || {}}
+          basePromos={basePromoState?.promos || []}
+          rows={baseRows}
+          fiscalCalendar={fiscalCalendar}
+          onSaveNew={onCreatePromoBlock}
+          onOverwrite={(blockId, state) => onSavePromotion(blockId, state)}
+          onBlockChange={setPendingPromoId}
+        />
+      )}
     </div>
   )
 }
@@ -262,12 +316,19 @@ export default function ScenariosView({
   scenarios = [],
   savedScenarios = [],
   blocks = {},
+  devData,
   baseRows,
+  fiscalCalendar = {},
+  basePromoState,
   onNewScenario,
   onDeleteScenario,
   onUpdateScenario,
   onSaveDistribution,
   onCreateDistributionBlock,
+  onSavePromotion,
+  onCreatePromotionBlock,
+  onSavePricing,
+  onCreatePricingBlock,
 }) {
   const allItems = [
     ...scenarios.map(s => ({ ...s, _isBase: true })),
@@ -339,11 +400,18 @@ export default function ScenariosView({
       <ScenarioDetail
         key={selected?.id}
         scenario={selected}
+        devData={devData}
         blocks={blocks}
         baseRows={baseRows}
+        fiscalCalendar={fiscalCalendar}
+        basePromoState={basePromoState}
         onDelete={handleDelete}
         onSaveNew={onCreateDistributionBlock}
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}
+        onCreatePromoBlock={onCreatePromotionBlock}
+        onSavePromotion={onSavePromotion}
+        onCreatePricingBlock={onCreatePricingBlock}
+        onSavePricing={onSavePricing}
         onUpdateScenario={onUpdateScenario}
       />
     </div>
