@@ -214,7 +214,7 @@ async def compute_scenario(req: ComputeRequest):
                 p["weeks_event_promo1"] = cell.weeks
                 p["scan_promo1"]        = cell.scan
                 p["fixed_promo1"]       = cell.fixed_fee
-                p["lift_promo1"]        = cell.expected_lift
+                p["lift_promo1"]        = (1.0 + cell.expected_lift / 100.0) if cell.expected_lift is not None else None
 
     try:
         results = run_account(cfg, inp)
