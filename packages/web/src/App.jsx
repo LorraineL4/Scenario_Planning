@@ -695,6 +695,10 @@ export default function App() {
               Choose .xlsx file
               <input type="file" accept=".xlsx" hidden onChange={(e) => handleFile(e.target.files[0])} />
             </label>
+            <label className="btn">
+              Import saved scenarios
+              <input type="file" accept=".json" hidden onChange={handleImportFile} />
+            </label>
             {import.meta.env.DEV && (
               <button className="btn ghost" onClick={loadDevData}>Load dev data</button>
             )}
