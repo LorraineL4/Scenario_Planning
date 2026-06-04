@@ -27,6 +27,10 @@ _PROMO_PERIOD_FIELDS = (
     "scan_promo1", "fixed_promo1", "lift_promo1",
 )
 
+_PRICING_PERIOD_FIELDS = (
+    "base_price", "gross_price", "edlp_direct", "edlp_mcb_pct", "price_impact_manual",
+)
+
 
 def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
     result = {}
@@ -37,6 +41,11 @@ def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
             period: {f: pdata.get(f) for f in _PROMO_PERIOD_FIELDS}
             for period, pdata in inp.get("periods", {}).items()
         }
+        pricing_periods = {
+            period: {f: pdata.get(f) for f in _PRICING_PERIOD_FIELDS}
+            for period, pdata in inp.get("periods", {}).items()
+        }
+        current_inputs = {f: inp.get("current_inputs", {}).get(f) for f in _PRICING_PERIOD_FIELDS}
         result[name] = {
             "velocity":           inp.get("velocity"),
             "current_acv":        inp.get("current_acv"),
@@ -47,6 +56,8 @@ def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
             "seasonality":        c.get("seasonality", {}),
             "static_inputs":      c.get("static_inputs", {}),
             "promo_periods":      promo_periods,
+            "pricing_periods":    pricing_periods,
+            "current_inputs":     current_inputs,
         }
     return result
 

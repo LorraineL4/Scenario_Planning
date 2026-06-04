@@ -5,6 +5,7 @@ import ScenarioListView from './components/ScenarioListView.jsx';
 import ScenariosView from './components/ScenariosView.jsx';
 import ScenarioComposerView from './components/ScenarioComposerView.jsx';
 import PromotionView from './components/PromotionView.jsx';
+import PricingView from './components/PricingView.jsx';
 import { Icon } from './components/ui.jsx';
 import { MONTHS, heatColor, isDarkFill, clampACV, Cell, ApplyPopover } from './components/DistributionTable.jsx';
 import { PlanDropdown, SaveModal } from './components/DistributionEditor.jsx';
@@ -275,7 +276,9 @@ export default function App() {
       if (engineResult.status === 'fulfilled') {
         setDevData(engineResult.value);
         const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-        if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); if (saved?.savedScenarios) setSavedScenarios(saved.savedScenarios); } catch {} }
+        if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`) } catch {} }
+        setBlocks({ distribution: [], pricing: [], promotion: [] });
+        setSavedScenarios([]);
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -551,6 +554,30 @@ export default function App() {
     setBlocks(b => ({ ...b, distribution: [...b.distribution, newBlock] }));
   }, []);
 
+  const savePricingBlock = useCallback((name, snapshot) => {
+    setBlocks(b => ({
+      ...b,
+      pricing: [...b.pricing, {
+        id: `pricing-${Date.now()}`,
+        name,
+        note: `${Object.keys(snapshot).length} SKUs · saved`,
+        created_at: new Date().toISOString(),
+        inputs: snapshot,
+      }],
+    }));
+  }, []);
+
+  const overwritePricingBlock = useCallback((blockId, snapshot) => {
+    setBlocks(b => ({
+      ...b,
+      pricing: b.pricing.map(bl =>
+        bl.id === blockId
+          ? { ...bl, inputs: snapshot, note: `${Object.keys(snapshot).length} SKUs · saved` }
+          : bl
+      ),
+    }));
+  }, []);
+
   useEffect(() => {
     const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
     if (!acctKey) return;
@@ -701,14 +728,15 @@ export default function App() {
         </>
       )}
 
-      {/* ── Pricing placeholder tab ── */}
+      {/* ── Pricing tab ── */}
       {view === 'pricing' && (
-        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink-2)', marginBottom: 6 }}>Pricing editor</div>
-            <div style={{ fontSize: 13 }}>In development — coming soon</div>
-          </div>
-        </div>
+        <PricingView
+          devData={devData}
+          fiscalCalendar={fiscalCalendar}
+          blocks={blocks.pricing}
+          onSaveNew={savePricingBlock}
+          onOverwrite={overwritePricingBlock}
+        />
       )}
 
       {/* ── Promotion tab ── */}
