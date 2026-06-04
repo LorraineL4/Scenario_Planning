@@ -237,7 +237,10 @@ export default function App() {
       setShowBasePlan(true);
       setDevData(data);
       const acctKey = data.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-      if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); if (saved?.savedScenarios) setSavedScenarios(saved.savedScenarios); } catch {} }
+      if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
+      setBlocks({ distribution: [], pricing: [], promotion: [] });
+      setSavedScenarios([]);
+      setBaseScenarioOverrides({});
       setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
@@ -273,9 +276,10 @@ export default function App() {
       if (engineResult.status === 'fulfilled') {
         setDevData(engineResult.value);
         const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-        if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`) } catch {} }
+        if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
         setBlocks({ distribution: [], pricing: [], promotion: [] });
         setSavedScenarios([]);
+        setBaseScenarioOverrides({});
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -811,6 +815,7 @@ export default function App() {
             onCreatePromotionBlock={createPromotionBlock}
             onSavePricing={(blockId, snapshot) => updateBlockInputs('pricing', blockId, snapshot)}
             onCreatePricingBlock={savePricingBlock}
+            months={months}
           />
         </div>
       )}

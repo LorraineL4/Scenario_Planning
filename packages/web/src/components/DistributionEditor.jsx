@@ -176,6 +176,7 @@ export default function DistributionEditor({
   onSaveNew,
   onOverwrite,
   onBlockChange,
+  months = MONTHS,
 }) {
   const [rows, setRows] = useState(() =>
     (initialRows || []).map(r => ({ ...r, months: { ...r.months } }))
@@ -224,16 +225,16 @@ export default function DistributionEditor({
   }, [])
 
   const applyRange = useCallback((rowId, start, end, value) => {
-    const si = MONTHS.indexOf(start), ei = MONTHS.indexOf(end)
+    const si = months.indexOf(start), ei = months.indexOf(end)
     setRows(rs => rs.map(r => {
       if (r.id !== rowId) return r
-      const months = { ...r.months }
-      for (let i = si; i <= ei; i++) months[MONTHS[i]] = value
-      return { ...r, months }
+      const updated = { ...r.months }
+      for (let i = si; i <= ei; i++) updated[months[i]] = value
+      return { ...r, months: updated }
     }))
     setEdited(s => {
       const n = new Set(s)
-      for (let i = si; i <= ei; i++) n.add(rowId + '|m:' + MONTHS[i])
+      for (let i = si; i <= ei; i++) n.add(rowId + '|m:' + months[i])
       return n
     })
     setPopover(null)
@@ -264,11 +265,18 @@ export default function DistributionEditor({
   }
 
   const handleOverwrite = () => {
-    if (!activeBlock) return
     const snapshot = rows.map(r => ({ ...r, months: { ...r.months } }))
-    onOverwrite?.(activeBlock.id, snapshot)
+    if (activeBlock) {
+      onOverwrite?.(activeBlock.id, snapshot)
+    } else {
+      onSaveNew?.('Base Distribution', snapshot)
+    }
     setSaveModalOpen(false)
   }
+
+  // Present "Base Distribution" as a named block so SaveModal always shows the
+  // choice box — mirrors how the main distribution tab works in App.jsx.
+  const effectiveBlock = activeBlock || { id: '__base__', name: 'Base Distribution' }
 
   const popRow = popover ? rows.find(r => r.id === popover.rowId) : null
 
@@ -308,7 +316,7 @@ export default function DistributionEditor({
               <th className="sticky-l c-sku">SKU Name</th>
               <th className="num">Unit<br/>Velocity</th>
               <th className="num">Current<br/>ACV</th>
-              {MONTHS.map(m => <th key={m} className="num c-mon">{m}</th>)}
+              {months.map(m => <th key={m} className="num c-mon">{m}</th>)}
               <th className="num">Dist<br/>Prob</th>
               <th className="sticky-r c-adj">Adjust</th>
             </tr>
@@ -326,8 +334,8 @@ export default function DistributionEditor({
                     onStart={() => setEditing({ rowId: r.id, field: 'unit_velocity' })}
                     onCommit={(v) => commitCell(r.id, 'unit_velocity', v)}
                   />
-                  <td className="cell num r ro acv-cur"><span className="cell-val">{fmt.acv(r.current_ACV)}</span></td>
-                  {MONTHS.map(m => (
+                  <td className="cell num r ro acv-cur"><span className="cell-val">{fmt.acv(r.current_ACV)}%</span></td>
+                  {months.map(m => (
                     <Cell
                       key={m} align="r" heat={r.months[m]}
                       value={r.months[m]} display={fmt.acv(r.months[m])}
@@ -357,7 +365,7 @@ export default function DistributionEditor({
               ))
             ))}
             {totalShown === 0 && (
-              <tr><td className="empty" colSpan={MONTHS.length + 5}>No SKUs match "{search}".</td></tr>
+              <tr><td className="empty" colSpan={months.length + 5}>No SKUs match "{search}".</td></tr>
             )}
           </tbody>
         </table>
@@ -365,7 +373,7 @@ export default function DistributionEditor({
 
       {popover && popRow && (
         <ApplyPopover
-          row={popRow} anchor={popover.anchor}
+          row={popRow} anchor={popover.anchor} months={months}
           onApply={(s, e, v) => applyRange(popover.rowId, s, e, v)}
           onClose={() => setPopover(null)}
         />
@@ -373,7 +381,7 @@ export default function DistributionEditor({
 
       {saveModalOpen && (
         <SaveModal
-          activeBlock={activeBlock}
+          activeBlock={effectiveBlock}
           blockType="distribution"
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
