@@ -811,6 +811,7 @@ export default function App() {
             onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
             onCreateDistributionBlock={createDistributionBlock}
             onWriteToDAP={handleWriteToDAP}
+            months={months}
           />
         </div>
       )}

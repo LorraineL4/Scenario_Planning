@@ -30,7 +30,7 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario, onWriteToDAP }) {
+function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario, onWriteToDAP, months }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
@@ -124,7 +124,13 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
             <button
-              onClick={() => onWriteToDAP?.(scenario, initialRows)}
+              onClick={() => {
+                const activeId = isBase ? null : (pendingDistId || scenario.distributionId || '__base__')
+                const activeBlk = (activeId && activeId !== '__base__')
+                  ? (blocks.distribution || []).find(b => b.id === activeId) || null
+                  : null
+                onWriteToDAP?.(scenario, activeBlk ? activeBlk.inputs : (baseRows || []))
+              }}
               style={{
                 fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 7,
                 border: '1px solid var(--line-strong)', background: 'var(--panel)',
@@ -222,6 +228,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
           onSaveNew={onSaveNew}
           onOverwrite={onOverwrite}
           onBlockChange={!isBase ? setPendingDistId : undefined}
+          months={months}
         />
       )}
       {subTab === 'pricing' && <ComingSoonPanel label="Pricing" />}
@@ -285,6 +292,7 @@ export default function ScenariosView({
   onSaveDistribution,
   onCreateDistributionBlock,
   onWriteToDAP,
+  months,
 }) {
   const allItems = [
     ...scenarios.map(s => ({ ...s, _isBase: true })),
@@ -363,6 +371,7 @@ export default function ScenariosView({
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}
         onUpdateScenario={onUpdateScenario}
         onWriteToDAP={onWriteToDAP}
+        months={months}
       />
     </div>
   )
