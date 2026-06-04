@@ -215,10 +215,11 @@ function ApplyPopover({ row, anchor, onApply, onClose }) {
 
 // ─── Save plan modal ────────────────────────────────────────────────────────
 
-function SaveModal({ activeBlock, onOverwrite, onSaveNew, onClose }) {
+function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose }) {
   const [step, setStep] = useState(activeBlock ? 'choice' : 'name');
   const [name, setName] = useState('');
   const inputRef = useRef(null);
+  const typeLabel = blockType.charAt(0).toUpperCase() + blockType.slice(1);
 
   useEffect(() => {
     if (step === 'name') inputRef.current?.focus();
@@ -253,11 +254,11 @@ function SaveModal({ activeBlock, onOverwrite, onSaveNew, onClose }) {
       <div style={{ background: 'var(--panel)', borderRadius: 14, padding: '28px 28px 24px', width: 380, boxShadow: '0 8px 40px rgba(0,0,0,.2)' }}>
         {step === 'choice' ? (
           <>
-            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save plan</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save {typeLabel.toLowerCase()} block</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
-              {optBtn(() => setStep('name'), 'Save as new plan', 'Create a new named snapshot')}
+              {optBtn(() => setStep('name'), 'Save as new block', 'Create a new named snapshot')}
             </div>
             <button onClick={onClose} style={{
               marginTop: 14, width: '100%', padding: '8px', borderRadius: 8, border: 'none',
@@ -266,8 +267,8 @@ function SaveModal({ activeBlock, onOverwrite, onSaveNew, onClose }) {
           </>
         ) : (
           <>
-            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save as new plan</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>Give this distribution snapshot a name.</div>
+            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save as new block</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>Give this {typeLabel.toLowerCase()} snapshot a name.</div>
             <input
               ref={inputRef}
               value={name}
@@ -316,7 +317,7 @@ function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const label = activeBlock ? activeBlock.name : 'Base plan';
+  const label = activeBlock ? activeBlock.name : 'Base Distribution';
   const btnStyle = {
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
     borderRadius: 7, border: '1px solid var(--line)',
@@ -350,7 +351,7 @@ function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
         }}>
           <div style={{ padding: '6px 4px' }}>
             <button onClick={() => { onSelectBase(); setOpen(false); }} style={itemStyle(!activeBlock)}>
-              <span style={{ flex: 1 }}>Base plan</span>
+              <span style={{ flex: 1 }}>Base Distribution</span>
               {!activeBlock && <span style={{ fontSize: 11, fontWeight: 700 }}>current</span>}
             </button>
             {blocks.length > 0 && (
@@ -500,7 +501,9 @@ export default function App() {
   const [view, setView]       = useState('compare');
   const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
   const [baseRows, setBaseRows]     = useState(null);
+  const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
+  const [activeIsBase, setActiveIsBase] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
@@ -516,6 +519,8 @@ export default function App() {
       setMeta({ sheet: data.account?.account_name || 'Dev data', count: initialRows.length });
       setBaseRows(initialRows);
       setActiveBlockId(null);
+      setActiveIsBase(false);
+      setShowBasePlan(true);
       setDevData(data);
       const acctKey = data.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
       if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); } catch {} }
@@ -650,7 +655,8 @@ export default function App() {
   const scenarios = useMemo(() => devData ? [buildBaseScenario(devData)] : [], [devData]);
   const fiscalCalendar = devData?.fiscal_calendar || {};
   const skuCount = devData ? Object.keys(devData.skus || {}).length : rows?.length;
-  const activeBlock = activeBlockId ? (blocks.distribution.find(b => b.id === activeBlockId) ?? null) : null;
+  const activePlanBlock = activeBlockId ? (blocks.distribution.find(b => b.id === activeBlockId) ?? null) : null;
+  const activeBlock = activeIsBase ? { id: '__base__', name: 'Base Distribution' } : activePlanBlock;
 
   // ── Building block actions ────────────────────────────────────────────────
 
@@ -660,6 +666,7 @@ export default function App() {
     setRows(block.inputs.map(r => ({ ...r, months: { ...r.months } })));
     setEdited(new Set());
     setActiveBlockId(block.id);
+    setActiveIsBase(false);
   }, []);
 
   const loadBase = useCallback(() => {
@@ -667,6 +674,7 @@ export default function App() {
     setRows(baseRows.map(r => ({ ...r, months: { ...r.months } })));
     setEdited(new Set());
     setActiveBlockId(null);
+    setActiveIsBase(false);
   }, [baseRows]);
 
   const saveDistributionBlock = useCallback((name) => {
@@ -683,6 +691,11 @@ export default function App() {
   }, [rows]);
 
   const handleOverwrite = useCallback(() => {
+    if (activeIsBase) {
+      setBaseRows(rows.map(r => ({ ...r, months: { ...r.months } })));
+      setSaveModalOpen(false);
+      return;
+    }
     if (!activeBlockId) return;
     setBlocks(b => ({
       ...b,
@@ -693,11 +706,11 @@ export default function App() {
       ),
     }));
     setSaveModalOpen(false);
-  }, [activeBlockId, rows]);
+  }, [activeIsBase, activeBlockId, rows]);
 
   const handleSaveNew = useCallback((name) => {
-    if (name.toLowerCase() === 'base plan') {
-      alert('"Base plan" is reserved. Choose a different name.');
+    if (name.toLowerCase() === 'base distribution') {
+      alert('"Base distribution" is reserved. Choose a different name.');
       return;
     }
     if (blocks.distribution.some(b => b.name === name)) {
@@ -705,6 +718,7 @@ export default function App() {
       return;
     }
     saveDistributionBlock(name);
+    setActiveIsBase(false);
     setSaveModalOpen(false);
   }, [blocks.distribution, saveDistributionBlock]);
 
@@ -714,6 +728,7 @@ export default function App() {
       setRows(baseRows.map(r => ({ ...r, months: { ...r.months } })));
       setEdited(new Set());
       setActiveBlockId(null);
+      setActiveIsBase(false);
     }
   }, [activeBlockId, baseRows]);
 
@@ -795,7 +810,7 @@ export default function App() {
           <div className="bar">
             <div className="bar-left" style={{ gap: 8 }}>
               <PlanDropdown
-                activeBlock={activeBlock}
+                activeBlock={activePlanBlock}
                 blocks={blocks.distribution}
                 onSelectBase={loadBase}
                 onSelectBlock={loadBlock}
@@ -914,7 +929,15 @@ export default function App() {
             <CompareView scenarios={scenarios} fiscalCalendar={fiscalCalendar} />
           )}
           {view === 'scenarios' && (
-            <ScenarioListView scenarios={scenarios} blocks={blocks} onDeleteBlock={deleteBlock} />
+            <ScenarioListView
+              scenarios={scenarios}
+              blocks={blocks}
+              showBasePlan={showBasePlan}
+              onDeleteBlock={deleteBlock}
+              onDeleteBase={() => setShowBasePlan(false)}
+              onEditBlock={(block) => { loadBlock(block); setView('distribution'); }}
+              onEditBase={() => { loadBase(); setActiveIsBase(true); setView('distribution'); }}
+            />
           )}
         </div>
       )}
@@ -922,6 +945,7 @@ export default function App() {
       {saveModalOpen && (
         <SaveModal
           activeBlock={activeBlock}
+          blockType="distribution"
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
           onClose={() => setSaveModalOpen(false)}

@@ -4,7 +4,52 @@ import { tagColor, tagSoft, Dot, Icon } from './ui.jsx'
 const fmt$ = (v) => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 const fmtPct = (v) => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
 
-function BlockCard({ block, onDelete }) {
+const iconBtn = {
+  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)',
+  padding: 2, display: 'flex', alignItems: 'center', flex: 'none',
+}
+
+function BasePlanCard({ label, onEdit, onDelete }) {
+  const [confirming, setConfirming] = useState(false)
+  const hasActions = onEdit || onDelete
+  return (
+    <div style={{
+      background: 'var(--panel)', border: '1px solid var(--line)',
+      borderRadius: 'var(--radius)', padding: '14px 16px',
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.3 }}>{label}</div>
+          <span style={{
+            fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
+            color: 'var(--navy)', background: 'var(--navy-50)', padding: '2px 6px', borderRadius: 4,
+          }}>BASE</span>
+        </div>
+        {hasActions && (confirming ? (
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+            <button onClick={onDelete} style={{
+              fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 5, border: 'none',
+              background: '#dc2626', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Delete</button>
+            <button onClick={() => setConfirming(false)} style={{
+              fontSize: 11.5, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
+              border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Cancel</button>
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+            {onEdit && <button onClick={onEdit} style={iconBtn} title="Edit in tab"><Icon name="pencil" size={14} /></button>}
+            {onDelete && <button onClick={() => setConfirming(true)} style={iconBtn} title={`Delete ${label}`}><Icon name="trash" size={14} /></button>}
+          </div>
+        ))}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)' }}>Original plan</div>
+    </div>
+  )
+}
+
+function BlockCard({ block, onDelete, onEdit }) {
   const [confirming, setConfirming] = useState(false)
   const d = new Date(block.created_at)
   const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
@@ -28,12 +73,14 @@ function BlockCard({ block, onDelete }) {
             }}>Cancel</button>
           </div>
         ) : (
-          <button onClick={() => setConfirming(true)} style={{
-            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)',
-            padding: 2, display: 'flex', alignItems: 'center', flex: 'none',
-          }} title="Delete block">
-            <Icon name="trash" size={14} />
-          </button>
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+            <button onClick={() => onEdit?.(block)} style={iconBtn} title="Edit in tab">
+              <Icon name="pencil" size={14} />
+            </button>
+            <button onClick={() => setConfirming(true)} style={iconBtn} title="Delete block">
+              <Icon name="trash" size={14} />
+            </button>
+          </div>
         )}
       </div>
       <div style={{ fontSize: 12, color: 'var(--muted)' }}>{block.note} · {dateStr}</div>
@@ -100,16 +147,13 @@ function ScenarioCard({ scenario: s }) {
 const colHeader = (label) => (
   <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink-2)', marginBottom: 10, letterSpacing: '.02em' }}>{label}</div>
 )
-const devPlaceholder = (label) => (
-  <div style={{
-    border: '1.5px dashed var(--muted-2)', borderRadius: 'var(--radius)',
-    padding: '18px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 12.5,
-  }}>
-    {label} — in development
+const comingSoon = (
+  <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', paddingLeft: 2, marginTop: 4 }}>
+    Editor coming soon
   </div>
 )
 
-export default function ScenarioListView({ scenarios = [], blocks = { distribution: [], pricing: [], promotion: [] }, onDeleteBlock }) {
+export default function ScenarioListView({ scenarios = [], blocks = { distribution: [], pricing: [], promotion: [] }, showBasePlan = true, onDeleteBlock, onEditBlock, onEditBase, onDeleteBase }) {
   return (
     <div className="fade-in" style={{ padding: 'var(--gut)', maxWidth: 1320, margin: '0 auto' }}>
 
@@ -125,24 +169,36 @@ export default function ScenarioListView({ scenarios = [], blocks = { distributi
           <div>
             {colHeader('Distribution')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {blocks.distribution.length === 0 ? (
-                <div style={{ color: 'var(--muted)', fontSize: 12.5, fontStyle: 'italic', paddingLeft: 2 }}>
-                  No blocks saved — use "Save as block…" in the Distribution tab to snapshot the current plan
-                </div>
-              ) : (
-                blocks.distribution.map(bl => (
-                  <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('distribution', id)} />
-                ))
-              )}
+              {showBasePlan && <BasePlanCard label="Base Distribution" onEdit={onEditBase} onDelete={onDeleteBase} />}
+              {blocks.distribution.map(bl => (
+                <BlockCard
+                  key={bl.id}
+                  block={bl}
+                  onDelete={(id) => onDeleteBlock?.('distribution', id)}
+                  onEdit={(block) => onEditBlock?.(block)}
+                />
+              ))}
             </div>
           </div>
           <div>
             {colHeader('Pricing')}
-            {devPlaceholder('Pricing editor')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <BasePlanCard label="Base Pricing" />
+              {blocks.pricing?.map(bl => (
+                <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('pricing', id)} />
+              ))}
+              {comingSoon}
+            </div>
           </div>
           <div>
             {colHeader('Promotion')}
-            {devPlaceholder('Promotion editor')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <BasePlanCard label="Base Promotion" />
+              {blocks.promotion?.map(bl => (
+                <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('promotion', id)} />
+              ))}
+              {comingSoon}
+            </div>
           </div>
         </div>
       </div>
