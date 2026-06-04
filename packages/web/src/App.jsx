@@ -212,6 +212,7 @@ export default function App() {
   const [devData, setDevData] = useState(null);
   const [view, setView]       = useState('compare');
   const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
+  const [blockRevision, setBlockRevision] = useState(0);
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [baseScenarioOverrides, setBaseScenarioOverrides] = useState({});
   const [baseRows, setBaseRows]     = useState(null);
@@ -559,6 +560,7 @@ export default function App() {
         ...b,
         [type]: b[type].map(bl => bl.id === blockId ? { ...bl, inputs } : bl),
       }));
+      setBlockRevision(r => r + 1);
     }
   }, []);
 
@@ -777,7 +779,7 @@ export default function App() {
       {/* ── Compare tab ── */}
       {view === 'compare' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          <CompareView scenarios={showBasePlan ? scenarios : []} savedScenarios={savedScenarios} blocks={blocks} fiscalCalendar={fiscalCalendar} />
+          <CompareView scenarios={showBasePlan ? scenarios : []} savedScenarios={savedScenarios} blocks={blocks} fiscalCalendar={fiscalCalendar} blockRevision={blockRevision} />
         </div>
       )}
 

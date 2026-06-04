@@ -87,17 +87,19 @@ function fetchEnriched(scenario, blocks) {
   }).then(r => r.ok ? r.json() : null)
 }
 
-export default function CompareView({ scenarios = [], savedScenarios = [], blocks = {}, fiscalCalendar = {} }) {
+export default function CompareView({ scenarios = [], savedScenarios = [], blocks = {}, fiscalCalendar = {}, blockRevision = 0 }) {
   const [enriched, setEnriched] = useState({})
+  const [computeError, setComputeError] = useState(false)
 
   const scenariosKey = savedScenarios.map(s => `${s.id}/${s.distributionId}/${s.pricingId}/${s.promotionId}`).join('|')
   useEffect(() => {
+    setComputeError(false)
     savedScenarios.forEach(s => {
       fetchEnriched(s, blocks)
         .then(data => { if (data) setEnriched(prev => ({ ...prev, [s.id]: { ...s, ...data } })) })
-        .catch(() => {})
+        .catch(() => setComputeError(true))
     })
-  }, [scenariosKey]) // eslint-disable-line
+  }, [scenariosKey, blockRevision]) // eslint-disable-line
 
   const allScenarios = [
     ...scenarios,
@@ -140,6 +142,11 @@ export default function CompareView({ scenarios = [], savedScenarios = [], block
 
   return (
     <div className="fade-in" style={{ padding: 'var(--gut)', maxWidth: 1320, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {computeError && (
+        <div style={{ padding: '10px 14px', borderRadius: 8, background: '#fdeae8', color: '#b3261e', fontSize: 13, fontWeight: 500 }}>
+          ⚠ Engine API unreachable — showing last known values. Check that the backend is running.
+        </div>
+      )}
 
       {/* ── Header + scenario pills ── */}
       <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 20, flexWrap: 'wrap' }}>

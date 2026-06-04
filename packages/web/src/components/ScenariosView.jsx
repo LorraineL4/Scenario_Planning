@@ -44,6 +44,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   const [pendingPromoId,   setPendingPromoId]   = useState(savedPromoId)
   const [pendingPricingId, setPendingPricingId] = useState(savedPricingId)
   const [computedFinancials, setComputedFinancials] = useState(null)
+  const [computing, setComputing] = useState(false)
+  const [computeError, setComputeError] = useState(false)
   const [blockRevision, setBlockRevision] = useState(0)
 
   useEffect(() => {
@@ -90,6 +92,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
       }))
     }
 
+    setComputing(true)
+    setComputeError(false)
     fetch('/api/compute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -104,9 +108,10 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         promo_rows: promoRows,
       }),
     })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => setComputedFinancials(data))
-      .catch((err) => console.error('[compute]', err))
+      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then(data => { setComputedFinancials(data); setComputeError(false) })
+      .catch(() => setComputeError(true))
+      .finally(() => setComputing(false))
   }, [pendingDistId, pendingPricingId, pendingPromoId, blockRevision])  // eslint-disable-line
 
   const isDistDirty    = pendingDistId    !== savedDistId
@@ -206,13 +211,15 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
             {(() => {
               const fin = computedFinancials || scenario
               return (
-                <div style={{ display: 'flex', gap: 16, marginLeft: 6, paddingLeft: 16, borderLeft: '1px solid var(--line)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginLeft: 6, paddingLeft: 16, borderLeft: '1px solid var(--line)' }}>
                   {[['Gross Sales', fmt$(fin?.grossSales)], ['T:S', fmtPct(fin?.tradeRate)]].map(([label, value]) => (
                     <div key={label}>
                       <div style={{ fontSize: 10, color: 'var(--muted)', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '.04em' }}>{label}</div>
-                      <div style={{ fontSize: 14, fontWeight: 800, color: 'var(--ink)', letterSpacing: '-.01em' }}>{value}</div>
+                      <div style={{ fontSize: 14, fontWeight: 800, color: computing ? 'var(--muted)' : 'var(--ink)', letterSpacing: '-.01em' }}>{value}</div>
                     </div>
                   ))}
+                  {computing && <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500 }}>Computing…</span>}
+                  {computeError && <span style={{ fontSize: 11, color: '#b3261e', fontWeight: 600 }}>⚠ Engine unreachable</span>}
                 </div>
               )
             })()}
@@ -299,6 +306,13 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           </button>
         ))}
       </div>
+
+      {/* Missing block warnings */}
+      {pendingDistId && pendingDistId !== '__base__' && !distBlock && (
+        <div style={{ margin: '8px 20px 0', padding: '8px 12px', borderRadius: 7, background: '#fef3e2', color: '#9a5900', fontSize: 12.5, fontWeight: 500 }}>
+          ⚠ Distribution block no longer exists — showing base data.
+        </div>
+      )}
 
       {/* Content */}
       {subTab === 'distribution' && (
