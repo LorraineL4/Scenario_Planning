@@ -50,7 +50,7 @@ export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {activeBlock?.id === '__base__' && !allowDirectBaseOverwrite
-                ? optBtn(() => setStep('name'), `Save as new ${typeLabel.toLowerCase()} block`, 'Create a saved block based on current data', true)
+                ? optBtn(() => onSaveNew(activeBlock.name), `Overwrite "${activeBlock?.name}"`, 'Save current data as a new block', true)
                 : optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
               {optBtn(() => setStep('name'), 'Save as new block', 'Create a new named snapshot')}
             </div>
