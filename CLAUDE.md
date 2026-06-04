@@ -36,7 +36,7 @@ Database (Postgres)
 | Phase | Scope |
 |---|---|
 | MVP | Single account, single SKU, 8 key inputs, save + compare 2–3 scenarios |
-| V2 | Multi-SKU rollup, clone scenarios, delta charts, consultant + client roles |
+| V2 | Multi-SKU rollup, clone scenarios, delta charts |
 | V3 | Sensitivity sliders, what-if analysis, export to Excel/PPT |
 
 ## How It Works
