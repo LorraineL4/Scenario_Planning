@@ -45,18 +45,16 @@ function buildBaseScenario(devData) {
     }
   }
 
-  // Weighted retailer margin and promo ROI from period-level engine output
-  let totalGross = 0, weightedMargin = 0
-  let totalPromoUnits = 0, weightedPromoROI = 0
+  // Weighted retailer margin, retail dollars from period-level engine output
+  let totalGross = 0, weightedMargin = 0, retailDollars = 0
   for (const sku of Object.values(resultSkus || {})) {
     for (const p of Object.values(sku.periods || {})) {
       if (p.gross_sales > 0 && p.everyday_retail_margin_pct != null) {
-        weightedMargin  += p.everyday_retail_margin_pct * p.gross_sales
-        totalGross      += p.gross_sales
+        weightedMargin += p.everyday_retail_margin_pct * p.gross_sales
+        totalGross     += p.gross_sales
       }
-      if (p.promo_units > 0 && p.promo_roi != null && isFinite(p.promo_roi)) {
-        weightedPromoROI  += p.promo_roi * p.promo_units
-        totalPromoUnits   += p.promo_units
+      if (p.everyday_net_cost && p.everyday_retail_margin_pct != null && p.everyday_retail_margin_pct < 100) {
+        retailDollars += (p.unit_sales || 0) * p.everyday_net_cost / (1 - p.everyday_retail_margin_pct / 100)
       }
     }
   }
@@ -73,7 +71,7 @@ function buildBaseScenario(devData) {
     id:               's-base',
     name:             'Base Plan',
     tag:              'navy',
-    note:             `${account?.account_name || ''} · ${account?.sales_channel || ''} · ${account?.primary_distributor || ''}`,
+    note:             null,
     stores:           account?.number_of_stores || 0,
     acvPct:           acvCount  > 0 ? totalAcv / acvCount        : 0,    // 0–1
     totalUnits:       at.unit_sales              || 0,
@@ -84,8 +82,9 @@ function buildBaseScenario(devData) {
     tradeRate:        (at.allin_trade_rate_pct   || 0) / 100,             // 0–1
     profitAfterTotal:   at.profit_after_total_spend   || 0,
     profitAfterWorking: at.profit_after_working_spend || 0,
+    workingSpend:     (at.retailer_working_spend || 0) + (at.distributor_working || 0),
+    retailDollars,
     retailMarginPct:  totalGross > 0 ? (weightedMargin / totalGross) / 100 : null,  // 0–1
-    promoROI:         totalPromoUnits > 0 ? weightedPromoROI / totalPromoUnits : null,
     per,
   }
 }
@@ -216,6 +215,7 @@ export default function App() {
   const [view, setView]       = useState('compare');
   const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
   const [savedScenarios, setSavedScenarios] = useState([]);
+  const [baseScenarioOverrides, setBaseScenarioOverrides] = useState({});
   const [baseRows, setBaseRows]     = useState(null);
   const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
@@ -368,7 +368,7 @@ export default function App() {
     else setCollapsed(new Set(groups.map(g => g.name)));
   };
 
-  const scenarios = useMemo(() => devData ? [buildBaseScenario(devData)] : [], [devData]);
+  const scenarios = useMemo(() => devData ? [{ ...buildBaseScenario(devData), ...baseScenarioOverrides }] : [], [devData, baseScenarioOverrides]);
   const fiscalCalendar = devData?.fiscal_calendar || {};
   const orderedMonths = Object.values(fiscalCalendar).map(info => info.month).filter(Boolean);
   const months = orderedMonths.length ? orderedMonths : MONTHS;
@@ -524,11 +524,20 @@ export default function App() {
   }, []);
 
   const deleteScenario = useCallback((id) => {
-    setSavedScenarios(ss => ss.filter(s => s.id !== id));
+    setSavedScenarios(ss => {
+      if (ss.some(s => s.id === id)) return ss.filter(s => s.id !== id)
+      setShowBasePlan(false)
+      return ss
+    })
   }, []);
 
   const updateScenario = useCallback((id, updates) => {
-    setSavedScenarios(ss => ss.map(s => s.id === id ? { ...s, ...updates } : s));
+    setSavedScenarios(ss => {
+      if (ss.some(s => s.id === id)) return ss.map(s => s.id === id ? { ...s, ...updates } : s)
+      // base scenario — store overrides in separate state
+      setBaseScenarioOverrides(prev => ({ ...prev, ...updates }))
+      return ss
+    })
   }, []);
 
   const updateBlockInputs = useCallback((type, blockId, inputs) => {
@@ -721,7 +730,7 @@ export default function App() {
       {/* ── Compare tab ── */}
       {view === 'compare' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          <CompareView scenarios={scenarios} fiscalCalendar={fiscalCalendar} />
+          <CompareView scenarios={showBasePlan ? scenarios : []} savedScenarios={savedScenarios} blocks={blocks} fiscalCalendar={fiscalCalendar} />
         </div>
       )}
 
@@ -743,7 +752,7 @@ export default function App() {
       {view === 'scenarios' && (
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           <ScenariosView
-            scenarios={scenarios}
+            scenarios={showBasePlan ? scenarios : []}
             savedScenarios={savedScenarios}
             blocks={blocks}
             baseRows={baseRows}

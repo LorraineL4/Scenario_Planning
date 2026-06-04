@@ -1,37 +1,75 @@
-import { useState, Fragment } from 'react'
+import { useState, useEffect, Fragment } from 'react'
 import { tagColor, tagSoft, Icon, Dot, Delta, Bar, Card } from './ui.jsx'
 import ColumnChart from './ColumnChart.jsx'
 
 const fmt$ = (v) => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 const fmtN = (v) => v == null ? '—' : Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })
 const fmtPct = (v) => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
-const fmtX   = (v) => v == null ? '—' : `${Number(v).toFixed(2)}×`
 
-// All stored as: usd/num → raw value; pct → 0–1 decimal; x → multiplier
-// kind='pct' delta = (v−base)×100 pp  |  else delta = (v−base)/|base|×100 %
 const METRIC_DEFS = [
-  { key: 'stores',             label: 'Authorized stores',          group: 'Distribution',     fmt: fmtN,    kind: 'num', higher: true  },
-  { key: 'acvPct',             label: 'ACV distribution',           group: 'Distribution',     fmt: fmtPct,  kind: 'pct', higher: true  },
-  { key: 'totalUnits',         label: 'Total units',                group: 'Volume',           fmt: fmtN,    kind: 'num', higher: true  },
-  { key: 'promoUnits',         label: 'Promoted units',             group: 'Volume',           fmt: fmtN,    kind: 'num', higher: true  },
-  { key: 'grossSales',         label: 'Gross sales',                group: 'Revenue',          fmt: fmt$,    kind: 'usd', higher: true  },
-  { key: 'netSales',           label: 'Net sales',                  group: 'Revenue',          fmt: fmt$,    kind: 'usd', higher: true  },
-  { key: 'totalSpend',         label: 'Total trade spend',          group: 'Trade investment', fmt: fmt$,    kind: 'usd', higher: false },
-  { key: 'tradeRate',          label: 'All-in trade rate',          group: 'Trade investment', fmt: fmtPct,  kind: 'pct', higher: false },
-  { key: 'profitAfterTotal',   label: 'Profit after total spend',   group: 'Profit',           fmt: fmt$,    kind: 'usd', higher: true  },
-  { key: 'profitAfterWorking', label: 'Profit after working spend', group: 'Profit',           fmt: fmt$,    kind: 'usd', higher: true  },
-  { key: 'retailMarginPct',    label: 'Retailer margin',            group: 'Retail health',    fmt: fmtPct,  kind: 'pct', higher: true  },
-  { key: 'promoROI',           label: 'Promo ROI',                  group: 'Retail health',    fmt: fmtX,    kind: 'x',   higher: true  },
+  { key: 'totalUnits',       label: 'Total Units',             fmt: fmtN,   kind: 'num', higher: true  },
+  { key: 'grossSales',       label: 'Total Gross Sales',       fmt: fmt$,   kind: 'usd', higher: true  },
+  { key: 'workingSpend',     label: 'Total Working Spend',     fmt: fmt$,   kind: 'usd', higher: false },
+  { key: 'totalSpend',       label: 'Total Trade',             fmt: fmt$,   kind: 'usd', higher: false },
+  { key: 'tradeRate',        label: 'T:S',                     fmt: fmtPct, kind: 'pct', higher: false },
+  { key: 'profitAfterTotal', label: 'Profits after All Trade', fmt: fmt$,   kind: 'usd', higher: true  },
+  { key: 'retailDollars',    label: 'Retail Dollars',          fmt: fmt$,   kind: 'usd', higher: true  },
+  { key: 'retailMarginPct',  label: 'Retail Margin',           fmt: fmtPct, kind: 'pct', higher: true  },
 ]
-const GROUPS = ['Distribution', 'Volume', 'Revenue', 'Trade investment', 'Profit', 'Retail health']
 
-export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
-  const [shown, setShown] = useState(() => scenarios.map(s => s.id))
-  const [baselineId, setBaselineId] = useState(() => scenarios[0]?.id)
+const BLOCK_TYPES = [
+  { label: 'Distribution', key: 'distributionId' },
+  { label: 'Pricing',      key: 'pricingId'      },
+  { label: 'Promotion',    key: 'promotionId'    },
+]
+
+function blockLabel(id, blocks, type) {
+  if (!id || id === '__base__') return `Base ${type}`
+  const found = (blocks[type.toLowerCase()] || []).find(b => b.id === id)
+  return found ? found.name : 'Unknown block'
+}
+
+function fetchEnriched(scenario, blocks) {
+  const distBlock = scenario.distributionId && scenario.distributionId !== '__base__'
+    ? (blocks.distribution || []).find(b => b.id === scenario.distributionId)
+    : null
+  const rows = distBlock?.inputs || null
+  return fetch('/api/compute', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      distribution_rows: rows ? rows.map(r => ({
+        SKU_name: r.SKU_name,
+        unit_velocity: r.unit_velocity,
+        months: r.months,
+        dist_prob: r.dist_prob,
+      })) : null,
+    }),
+  }).then(r => r.ok ? r.json() : null)
+}
+
+export default function CompareView({ scenarios = [], savedScenarios = [], blocks = {}, fiscalCalendar = {} }) {
+  const [enriched, setEnriched] = useState({})
+
+  useEffect(() => {
+    savedScenarios.forEach(s => {
+      fetchEnriched(s, blocks)
+        .then(data => { if (data) setEnriched(prev => ({ ...prev, [s.id]: { ...s, ...data } })) })
+        .catch(() => {})
+    })
+  }, []) // eslint-disable-line
+
+  const allScenarios = [
+    ...scenarios,
+    ...savedScenarios.map(s => enriched[s.id] || s),
+  ]
+
+  const [shown, setShown] = useState(() => allScenarios.map(s => s.id))
+  const [baselineId, setBaselineId] = useState(() => allScenarios[0]?.id)
   const [chartMetric, setChartMetric] = useState('grossSales')
 
-  const shownScenarios = scenarios.filter(s => shown.includes(s.id))
-  const baseline = scenarios.find(s => s.id === baselineId)
+  const shownScenarios = allScenarios.filter(s => shown.includes(s.id))
+  const baseline = allScenarios.find(s => s.id === baselineId)
   const months = Object.values(fiscalCalendar).map(p => (p.month || '').slice(0, 3))
 
   const winner = shownScenarios.length > 1
@@ -46,13 +84,19 @@ export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
       : [...prev, id]
   )
 
-  if (!scenarios.length) {
+  if (!allScenarios.length) {
     return (
       <div style={{ padding: 48, textAlign: 'center', color: 'var(--muted)', fontSize: 14 }}>
         No engine results — load a DAP file to see the compare view.
       </div>
     )
   }
+
+  const colStyle = (tag) => ({
+    padding: '10px 16px', borderBottom: '1px solid var(--line-2)',
+    borderLeft: '1px solid var(--line-2)',
+    background: `color-mix(in srgb, ${tagColor(tag)} 4%, transparent)`,
+  })
 
   return (
     <div className="fade-in" style={{ padding: 'var(--gut)', maxWidth: 1320, margin: '0 auto', display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -68,10 +112,10 @@ export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
             <strong style={{ color: 'var(--ink-2)' }}>{baseline?.name || 'baseline'}</strong>
           </p>
         </div>
-        {scenarios.length > 1 && (
+        {allScenarios.length > 1 && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
             <span style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Showing</span>
-            {scenarios.map(s => {
+            {allScenarios.map(s => {
               const on = shown.includes(s.id)
               return (
                 <button key={s.id} onClick={() => toggleShown(s.id)} style={{
@@ -89,7 +133,7 @@ export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
         )}
       </div>
 
-      {/* ── Winner banner (only with multiple scenarios) ── */}
+      {/* ── Winner banner ── */}
       {winner && (
         <div style={{
           display: 'flex', alignItems: 'center', gap: 14, padding: '13px 18px',
@@ -100,12 +144,8 @@ export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
           <Icon name="star" size={18} style={{ color: tagColor(winner.tag), flex: 'none' }} />
           <div style={{ fontSize: 13.5 }}>
             <strong>{winner.name}</strong>{' '}delivers the highest profit after total spend —{' '}
-            <span className="mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>
-              {fmt$(winner.profitAfterTotal)}
-            </span>
-            <span style={{ color: 'var(--muted)' }}>
-              {' '}at a {fmtPct(winner.tradeRate)} all-in trade rate.
-            </span>
+            <span className="mono" style={{ fontWeight: 600, color: 'var(--ink)' }}>{fmt$(winner.profitAfterTotal)}</span>
+            <span style={{ color: 'var(--muted)' }}>{' '}at a {fmtPct(winner.tradeRate)} all-in trade rate.</span>
           </div>
         </div>
       )}
@@ -114,118 +154,126 @@ export default function CompareView({ scenarios = [], fiscalCalendar = {} }) {
       <Card pad={0} style={{ overflow: 'hidden' }}>
         <div style={{ overflowX: 'auto' }}>
           <div style={{
-            minWidth: 230 + shownScenarios.length * 180,
+            minWidth: 220 + shownScenarios.length * 200,
             display: 'grid',
-            gridTemplateColumns: `230px repeat(${shownScenarios.length}, minmax(180px, 1fr))`,
+            gridTemplateColumns: `220px repeat(${shownScenarios.length}, minmax(200px, 1fr))`,
           }}>
 
-            {/* Header: blank + scenario columns */}
+            {/* Column headers */}
             <div style={{ borderBottom: '1px solid var(--line)', background: 'var(--panel-2)', padding: '12px 16px' }} />
             {shownScenarios.map(s => {
               const isBase = s.id === baselineId
+              const isLoading = savedScenarios.some(ss => ss.id === s.id) && !enriched[s.id]
               return (
                 <div key={s.id} style={{
                   padding: '14px 16px', borderBottom: '1px solid var(--line)',
                   borderLeft: '1px solid var(--line-2)', borderTop: `3px solid ${tagColor(s.tag)}`,
                   background: 'var(--panel-2)',
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 4 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10 }}>
                     <Dot tag={s.tag} />
                     <span style={{ fontWeight: 700, fontSize: 14, color: 'var(--ink)' }}>{s.name}</span>
+                    {isLoading && <span style={{ fontSize: 11, color: 'var(--muted)', fontWeight: 500 }}>Computing…</span>}
                   </div>
-                  <div style={{ fontSize: 11.5, color: 'var(--muted)', lineHeight: 1.4, minHeight: 28 }}>{s.note}</div>
-                  <div style={{ marginTop: 10 }}>
-                    <button onClick={() => setBaselineId(s.id)} style={{
-                      display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px',
-                      borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
-                      border: `1px solid ${isBase ? tagColor(s.tag) : 'var(--line)'}`,
-                      background: isBase ? tagSoft(s.tag) : 'var(--panel)',
-                      color: isBase ? 'var(--ink)' : 'var(--muted)',
-                    }}>
-                      <Icon name="pin" size={12} />
-                      {isBase ? 'Baseline' : 'Set baseline'}
-                    </button>
-                  </div>
+                  <button onClick={() => setBaselineId(s.id)} style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 9px',
+                    borderRadius: 6, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+                    border: `1px solid ${isBase ? tagColor(s.tag) : 'var(--line)'}`,
+                    background: isBase ? tagSoft(s.tag) : 'var(--panel)',
+                    color: isBase ? 'var(--ink)' : 'var(--muted)',
+                  }}>
+                    <Icon name="pin" size={12} />
+                    {isBase ? 'Baseline' : 'Set baseline'}
+                  </button>
                 </div>
               )
             })}
 
-            {/* Metric rows, grouped */}
-            {GROUPS.map(g => {
-              const metrics = METRIC_DEFS.filter(m => m.group === g)
+            {/* Planning Blocks section */}
+            <div style={{
+              gridColumn: '1 / -1', padding: '8px 16px',
+              background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)',
+              fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--slate)',
+            }}>
+              Planning Blocks
+            </div>
+
+            {BLOCK_TYPES.map(({ label, key }) => (
+              <Fragment key={key}>
+                <div style={{
+                  padding: '9px 16px', borderBottom: '1px solid var(--line-2)',
+                  fontSize: 13, color: 'var(--ink-2)', fontWeight: 500,
+                  display: 'flex', alignItems: 'center',
+                }}>
+                  {label}
+                </div>
+                {shownScenarios.map(s => {
+                  const name = blockLabel(s[key], blocks, label)
+                  const isCustom = s[key] && s[key] !== '__base__'
+                  return (
+                    <div key={s.id} style={{ ...colStyle(s.tag), display: 'flex', alignItems: 'center' }}>
+                      <span style={{
+                        fontSize: 13, fontWeight: isCustom ? 600 : 400,
+                        color: isCustom ? 'var(--navy)' : 'var(--muted)',
+                        fontStyle: isCustom ? 'normal' : 'italic',
+                      }}>
+                        {name}
+                      </span>
+                    </div>
+                  )
+                })}
+              </Fragment>
+            ))}
+
+            {/* Metric rows */}
+            {METRIC_DEFS.map(m => {
+              const vals = shownScenarios.map(s => s[m.key])
+              const validVals = vals.filter(v => v != null && isFinite(v))
+              const best = validVals.length ? (m.higher ? Math.max(...validVals) : Math.min(...validVals)) : null
+              const maxForBar = validVals.length ? Math.max(...validVals.map(Math.abs), 0) : 0
+              const baseVal = baseline?.[m.key]
+
               return (
-                <Fragment key={g}>
-                  {/* Group label */}
+                <Fragment key={m.key}>
                   <div style={{
-                    gridColumn: `1 / -1`, padding: '8px 16px',
-                    background: 'var(--panel-2)', borderBottom: '1px solid var(--line-2)',
-                    fontSize: 11, fontWeight: 700, letterSpacing: '.06em', textTransform: 'uppercase',
-                    color: 'var(--slate)',
+                    padding: '11px 16px', borderBottom: '1px solid var(--line-2)',
+                    fontSize: 13, color: 'var(--ink-2)', fontWeight: 500,
+                    display: 'flex', alignItems: 'center',
                   }}>
-                    {g}
+                    {m.label}
                   </div>
 
-                  {metrics.map(m => {
-                    const vals = shownScenarios.map(s => s[m.key])
-                    const validVals = vals.filter(v => v != null && isFinite(v))
-                    const best = validVals.length
-                      ? m.higher ? Math.max(...validVals) : Math.min(...validVals)
-                      : null
-                    const maxForBar = validVals.length ? Math.max(...validVals.map(Math.abs), 0) : 0
-                    const baseVal = baseline?.[m.key]
+                  {shownScenarios.map(s => {
+                    const v = s[m.key]
+                    const isBest = shownScenarios.length > 1 && v != null && v === best
+                    const isBaseCol = s.id === baselineId
+
+                    let deltaVal = null
+                    if (!isBaseCol && baseVal != null && v != null && isFinite(v) && isFinite(baseVal)) {
+                      deltaVal = m.kind === 'pct'
+                        ? (v - baseVal) * 100
+                        : baseVal !== 0 ? (v - baseVal) / Math.abs(baseVal) * 100 : null
+                    }
+
+                    const rawForBar = v ?? 0
+                    const barValue = m.higher ? rawForBar : (maxForBar > 0 ? maxForBar - rawForBar + maxForBar * 0.08 : 0)
+                    const barMax = m.higher ? maxForBar : maxForBar * 1.08
 
                     return (
-                      <Fragment key={m.key}>
-                        {/* Metric label cell */}
-                        <div style={{
-                          padding: '11px 16px', borderBottom: '1px solid var(--line-2)',
-                          display: 'flex', alignItems: 'center', fontSize: 13,
-                          color: 'var(--ink-2)', fontWeight: 500,
-                        }}>
-                          {m.label}
+                      <div key={s.id} style={{
+                        ...colStyle(s.tag),
+                        background: isBest ? tagSoft(s.tag) : colStyle(s.tag).background,
+                      }}>
+                        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
+                          <span className="mono" style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>
+                            {m.fmt(v)}
+                          </span>
+                          {deltaVal != null && (
+                            <Delta v={deltaVal} suffix={m.kind === 'pct' ? 'pp' : '%'} invert={!m.higher} />
+                          )}
                         </div>
-
-                        {/* Value + delta + bar per scenario */}
-                        {shownScenarios.map(s => {
-                          const v = s[m.key]
-                          const isBest = shownScenarios.length > 1 && v != null && v === best
-                          const isBaseCol = s.id === baselineId
-
-                          let deltaVal = null
-                          if (!isBaseCol && baseVal != null && v != null && isFinite(v) && isFinite(baseVal)) {
-                            if (m.kind === 'pct') {
-                              deltaVal = (v - baseVal) * 100
-                            } else {
-                              deltaVal = baseVal !== 0 ? (v - baseVal) / Math.abs(baseVal) * 100 : null
-                            }
-                          }
-
-                          // Bar: for "higher is better" proportional to value; for "lower" invert
-                          const rawForBar = v ?? 0
-                          const barValue = m.higher
-                            ? rawForBar
-                            : (maxForBar > 0 ? maxForBar - rawForBar + maxForBar * 0.08 : 0)
-                          const barMax = m.higher ? maxForBar : maxForBar * 1.08
-
-                          return (
-                            <div key={s.id} style={{
-                              padding: '10px 16px', borderBottom: '1px solid var(--line-2)',
-                              borderLeft: '1px solid var(--line-2)',
-                              background: isBest ? tagSoft(s.tag) : 'transparent',
-                            }}>
-                              <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
-                                <span className="mono" style={{ fontSize: 14.5, fontWeight: 600, color: 'var(--ink)' }}>
-                                  {m.fmt(v)}
-                                </span>
-                                {deltaVal != null && (
-                                  <Delta v={deltaVal} suffix={m.kind === 'pct' ? 'pp' : '%'} invert={!m.higher} />
-                                )}
-                              </div>
-                              <Bar value={barValue} max={barMax} color={tagColor(s.tag)} />
-                            </div>
-                          )
-                        })}
-                      </Fragment>
+                        <Bar value={barValue} max={barMax} color={tagColor(s.tag)} />
+                      </div>
                     )
                   })}
                 </Fragment>

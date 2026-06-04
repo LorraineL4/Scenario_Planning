@@ -35,12 +35,12 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
   const [confirming, setConfirming] = useState(false)
 
   const isBase = scenario?._isBase === true
-  const savedDistId = !isBase ? (scenario?.distributionId || '__base__') : null
+  const savedDistId = scenario?.distributionId || '__base__'
   const [pendingDistId, setPendingDistId] = useState(savedDistId)
   const [computedFinancials, setComputedFinancials] = useState(null)
 
   useEffect(() => {
-    if (isBase || !scenario) return
+    if (!scenario) return
     const distBlock = pendingDistId && pendingDistId !== '__base__'
       ? (blocks.distribution || []).find(b => b.id === pendingDistId) || null
       : null
@@ -62,7 +62,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
       .catch((err) => console.error('[compute]', err))
   }, [pendingDistId])  // eslint-disable-line
 
-  const isDistDirty = !isBase && pendingDistId !== savedDistId
+  const isDistDirty = pendingDistId !== savedDistId
 
   const handleSaveScenario = () => {
     if (isDistDirty) onUpdateScenario?.(scenario.id, { distributionId: pendingDistId })
@@ -77,7 +77,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
   }
 
   // Resolve the distribution block that this scenario uses
-  const distBlockId = isBase ? null : (scenario.distributionId || '__base__')
+  const distBlockId = scenario.distributionId || '__base__'
   const distBlock = (!distBlockId || distBlockId === '__base__')
     ? null
     : (blocks.distribution || []).find(b => b.id === distBlockId) || null
@@ -100,7 +100,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
             </h2>
             {/* Financial summary — inline after name */}
             {(() => {
-              const fin = isBase ? scenario : computedFinancials
+              const fin = computedFinancials || scenario
               return (
                 <div style={{ display: 'flex', gap: 16, marginLeft: 6, paddingLeft: 16, borderLeft: '1px solid var(--line)' }}>
                   {[['Gross Sales', fmt$(fin?.grossSales)], ['T:S', fmtPct(fin?.tradeRate)]].map(([label, value]) => (
@@ -123,59 +123,55 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
-            {!isBase && (
-              confirming ? (
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <button onClick={() => onDelete(scenario.id)} style={{
-                    fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: 'none',
-                    background: '#dc2626', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
-                  }}>Delete</button>
-                  <button onClick={() => setConfirming(false)} style={{
-                    fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
-                    border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'pointer', fontFamily: 'inherit',
-                  }}>Cancel</button>
-                </div>
-              ) : (
-                <button onClick={() => setConfirming(true)} style={{
-                  background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)',
-                  padding: 4, display: 'flex', alignItems: 'center',
-                }} title="Delete scenario">
-                  <Icon name="trash" size={15} />
-                </button>
-              )
+            {confirming ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button onClick={() => onDelete(scenario.id)} style={{
+                  fontSize: 12, fontWeight: 700, padding: '4px 10px', borderRadius: 6, border: 'none',
+                  background: '#dc2626', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+                }}>Delete</button>
+                <button onClick={() => setConfirming(false)} style={{
+                  fontSize: 12, fontWeight: 600, padding: '4px 10px', borderRadius: 6,
+                  border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'pointer', fontFamily: 'inherit',
+                }}>Cancel</button>
+              </div>
+            ) : (
+              <button onClick={() => setConfirming(true)} style={{
+                background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)',
+                padding: 4, display: 'flex', alignItems: 'center',
+              }} title="Delete scenario">
+                <Icon name="trash" size={15} />
+              </button>
             )}
           </div>
         </div>
         {scenario.note && (
           <p style={{ margin: '6px 0 0', fontSize: 12.5, color: 'var(--muted)' }}>{scenario.note}</p>
         )}
-        {!isBase && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-            <div style={{ display: 'flex', gap: 20 }}>
-              {[['Distribution', scenario.distributionId], ['Pricing', scenario.pricingId], ['Promotion', scenario.promotionId]].map(([type, id]) => (
-                <div key={type} style={{ display: 'flex', gap: 5, fontSize: 12 }}>
-                  <span style={{ color: 'var(--muted)' }}>{type}:</span>
-                  <span style={{ fontWeight: 600, color: isDistDirty && type === 'Distribution' ? 'var(--navy)' : 'var(--ink-2)' }}>
-                    {type === 'Distribution' && pendingDistId && pendingDistId !== (scenario.distributionId || '__base__')
-                      ? blockLabel(pendingDistId, blocks, type)
-                      : blockLabel(id, blocks, type)}
-                  </span>
-                </div>
-              ))}
-            </div>
-            <button
-              onClick={handleSaveScenario}
-              disabled={!isDistDirty}
-              style={{
-                fontSize: 14, fontWeight: 700, padding: '7px 18px', borderRadius: 7, border: 'none',
-                background: isDistDirty ? '#dc2626' : 'var(--panel-2)',
-                color: isDistDirty ? '#fff' : 'var(--muted)',
-                cursor: isDistDirty ? 'pointer' : 'default',
-                fontFamily: 'inherit', transition: 'background .15s, color .15s',
-              }}
-            >Save Scenario</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+          <div style={{ display: 'flex', gap: 20 }}>
+            {[['Distribution', scenario.distributionId], ['Pricing', scenario.pricingId], ['Promotion', scenario.promotionId]].map(([type, id]) => (
+              <div key={type} style={{ display: 'flex', gap: 5, fontSize: 12 }}>
+                <span style={{ color: 'var(--muted)' }}>{type}:</span>
+                <span style={{ fontWeight: 600, color: isDistDirty && type === 'Distribution' ? 'var(--navy)' : 'var(--ink-2)' }}>
+                  {type === 'Distribution' && pendingDistId && pendingDistId !== (scenario.distributionId || '__base__')
+                    ? blockLabel(pendingDistId, blocks, type)
+                    : blockLabel(id, blocks, type)}
+                </span>
+              </div>
+            ))}
           </div>
-        )}
+          <button
+            onClick={handleSaveScenario}
+            disabled={!isDistDirty}
+            style={{
+              fontSize: 14, fontWeight: 700, padding: '7px 18px', borderRadius: 7, border: 'none',
+              background: isDistDirty ? '#dc2626' : 'var(--panel-2)',
+              color: isDistDirty ? '#fff' : 'var(--muted)',
+              cursor: isDistDirty ? 'pointer' : 'default',
+              fontFamily: 'inherit', transition: 'background .15s, color .15s',
+            }}
+          >Save Scenario</button>
+        </div>
       </div>
 
       {/* Sub-tabs */}
@@ -209,7 +205,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
           showBasePlan={true}
           onSaveNew={onSaveNew}
           onOverwrite={onOverwrite}
-          onBlockChange={!isBase ? setPendingDistId : undefined}
+          onBlockChange={setPendingDistId}
         />
       )}
       {subTab === 'pricing' && <ComingSoonPanel label="Pricing" />}

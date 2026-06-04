@@ -143,11 +143,56 @@ async def compute_scenario(req: ComputeRequest):
 
     _add_account_periods(results)
     at = results.get("account_total", {})
+
+    # Weighted retailer margin and retail dollars from per-SKU period output
+    total_gross, weighted_margin = 0.0, 0.0
+    retail_dollars = 0.0
+    for sku_data in results.get("skus", {}).values():
+        for p_data in sku_data.get("periods", {}).values():
+            gs = p_data.get("gross_sales") or 0
+            margin = p_data.get("everyday_retail_margin_pct")
+            if gs > 0 and margin is not None:
+                weighted_margin += margin * gs
+                total_gross += gs
+            net_cost = p_data.get("everyday_net_cost") or 0
+            if net_cost and margin is not None and margin < 100:
+                retail_dollars += (p_data.get("unit_sales") or 0) * net_cost / (1 - margin / 100)
+
+    # Average ACV from (possibly modified) period-level inputs
+    total_acv, acv_count = 0.0, 0
+    for sku_data in inp.get("skus", {}).values():
+        for period_data in sku_data.get("periods", {}).values():
+            v = period_data.get("acv_pct")
+            if v is not None:
+                total_acv += v
+                acv_count += 1
+
+    # Period-ordered chart data
+    period_order = list(cfg.get("fiscal_calendar", {}).keys())
+    acct_periods = results.get("account_periods", {})
+    per = [
+        {
+            "grossSales": acct_periods.get(p, {}).get("gross_sales") or 0,
+            "units":      acct_periods.get(p, {}).get("unit_sales")  or 0,
+        }
+        for p in period_order
+    ]
+
     return {
-        "grossSales": at.get("gross_sales")  or 0,
-        "tradeRate":  (at.get("allin_trade_rate_pct") or 0) / 100,
-        "netSales":   at.get("net_sales")    or 0,
-        "totalSpend": at.get("total_spend")  or 0,
+        "grossSales":         at.get("gross_sales")               or 0,
+        "tradeRate":          (at.get("allin_trade_rate_pct") or 0) / 100,
+        "netSales":           at.get("net_sales")                 or 0,
+        "totalSpend":         at.get("total_spend")               or 0,
+        "totalUnits":         at.get("unit_sales")                or 0,
+        "promoUnits":         at.get("promo_units")               or 0,
+        "profitAfterTotal":   at.get("profit_after_total_spend")  or 0,
+        "profitAfterWorking": at.get("profit_after_working_spend") or 0,
+        "stores":             cfg.get("account", {}).get("number_of_stores") or 0,
+        "acvPct":             (total_acv / acv_count) if acv_count > 0 else 0,
+        "workingSpend":       (at.get("retailer_working_spend") or 0) + (at.get("distributor_working") or 0),
+        "retailDollars":      retail_dollars,
+        "retailMarginPct":    (weighted_margin / total_gross / 100) if total_gross > 0 else None,
+        "per":                per,
     }
 
 
