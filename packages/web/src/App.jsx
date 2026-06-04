@@ -4,6 +4,7 @@ import CompareView from './components/CompareView.jsx';
 import ScenarioListView from './components/ScenarioListView.jsx';
 import ScenariosView from './components/ScenariosView.jsx';
 import ScenarioComposerView from './components/ScenarioComposerView.jsx';
+import PromotionView from './components/PromotionView.jsx';
 import { Icon } from './components/ui.jsx';
 import { MONTHS, heatColor, isDarkFill, clampACV, Cell, ApplyPopover } from './components/DistributionTable.jsx';
 import { PlanDropdown, SaveModal } from './components/DistributionEditor.jsx';
@@ -372,6 +373,38 @@ export default function App() {
   const skuCount = devData ? Object.keys(devData.skus || {}).length : rows?.length;
   const activePlanBlock = activeBlockId ? (blocks.distribution.find(b => b.id === activeBlockId) ?? null) : null;
   const activeBlock = activeIsBase ? { id: '__base__', name: 'Base Distribution' } : activePlanBlock;
+  const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_') ?? null;
+
+  const planPromos = useMemo(() => {
+    if (!devData) return { grid: {}, promos: [] };
+    const nameToColor = new Map();
+    const grid = {};
+    for (const [skuName, skuData] of Object.entries(devData.skus || {})) {
+      for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
+        const name  = pdata.name_promo1;
+        const weeks = pdata.weeks_event_promo1;
+        if (!name || !weeks) continue;
+        if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
+        const lift = pdata.lift_promo1;
+        grid[`${skuName}|||${period}`] = {
+          id:            `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}`,
+          colorIdx:      nameToColor.get(name),
+          name,
+          promo_price:   Math.round((pdata.price_promo1 || 0) * 100) / 100,
+          weeks,
+          scan:          Math.round((pdata.scan_promo1  || 0) * 100) / 100,
+          fixed_fee:     Math.round((pdata.fixed_promo1 || 0) * 100) / 100,
+          expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
+        };
+      }
+    }
+    const promos = Array.from(nameToColor.entries()).map(([name, colorIdx]) => ({
+      id: `plan-${name.replace(/\s+/g, '-').toLowerCase()}`,
+      colorIdx,
+      name,
+    }));
+    return { grid, promos };
+  }, [devData]);
 
   // ── Building block actions ────────────────────────────────────────────────
 
@@ -668,16 +701,19 @@ export default function App() {
         </>
       )}
 
-      {/* ── Pricing / Promotion placeholder tabs ── */}
-      {(view === 'pricing' || view === 'promotion') && (
+      {/* ── Pricing placeholder tab ── */}
+      {view === 'pricing' && (
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
-            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink-2)', marginBottom: 6 }}>
-              {view === 'pricing' ? 'Pricing' : 'Promotion'} editor
-            </div>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink-2)', marginBottom: 6 }}>Pricing editor</div>
             <div style={{ fontSize: 13 }}>In development — coming soon</div>
           </div>
         </div>
+      )}
+
+      {/* ── Promotion tab ── */}
+      {view === 'promotion' && (
+        <PromotionView rows={rows} fiscalCalendar={fiscalCalendar} accountKey={acctKey} planPromos={planPromos} />
       )}
 
       {/* ── Compare tab ── */}
