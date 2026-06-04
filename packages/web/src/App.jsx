@@ -263,9 +263,8 @@ export default function App() {
       inputs: pricingData,
     };
 
-    // Promotion (both slots) — mirrors planPromos logic
-    const skuToGroup = {};
-    for (const r of distRows) skuToGroup[r.SKU_name] = r.Product_Group;
+    // Promotion (both slots)
+    // devData.skus keys ARE product group names — no mapping needed
     const nameToColor = new Map();
     const grid = {};
     const addSlot = (pg, period, slot, pdata) => {
@@ -286,10 +285,9 @@ export default function App() {
         expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
       };
     };
-    for (const [skuName, skuData] of Object.entries(skus)) {
-      const pg = skuToGroup[skuName]; if (!pg) continue;
+    for (const [pgName, skuData] of Object.entries(skus)) {
       for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
-        addSlot(pg, period, 1, pdata); addSlot(pg, period, 2, pdata);
+        addSlot(pgName, period, 1, pdata); addSlot(pgName, period, 2, pdata);
       }
     }
     const promos = Array.from(nameToColor.entries()).map(([name, colorIdx]) => ({
