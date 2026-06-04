@@ -295,6 +295,8 @@ async def compute_scenario(req: ComputeRequest):
 _PROMO_PERIOD_FIELDS = (
     "name_promo1", "price_promo1", "weeks_event_promo1",
     "scan_promo1", "fixed_promo1", "lift_promo1",
+    "name_promo2", "price_promo2", "weeks_event_promo2",
+    "scan_promo2", "fixed_promo2", "lift_promo2",
 )
 
 _PRICING_PERIOD_FIELDS = (
