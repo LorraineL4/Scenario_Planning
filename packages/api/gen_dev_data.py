@@ -33,7 +33,9 @@ _PRICING_PERIOD_FIELDS = (
 
 def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
     result = {}
-    for name in sorted(set(config_skus) | set(inputs_skus)):
+    # Preserve load_pg_list order (Helpers T-U); config_skus already carries it.
+    names = list(config_skus.keys()) + [n for n in inputs_skus if n not in config_skus]
+    for name in names:
         c = config_skus.get(name, {})
         inp = inputs_skus.get(name, {})
         promo_periods = {
