@@ -497,6 +497,10 @@ export default function App() {
     setSavedScenarios(ss => ss.filter(s => s.id !== id));
   }, []);
 
+  const updateScenario = useCallback((id, updates) => {
+    setSavedScenarios(ss => ss.map(s => s.id === id ? { ...s, ...updates } : s));
+  }, []);
+
   const updateBlockInputs = useCallback((type, blockId, inputs) => {
     if (!blockId || blockId === '__base__') {
       setBaseRows(inputs);
@@ -712,6 +716,7 @@ export default function App() {
             baseRows={baseRows}
             onNewScenario={() => setView('new-scenario')}
             onDeleteScenario={deleteScenario}
+            onUpdateScenario={updateScenario}
             onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
             onCreateDistributionBlock={createDistributionBlock}
           />

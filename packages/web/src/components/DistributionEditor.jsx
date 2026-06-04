@@ -175,6 +175,7 @@ export default function DistributionEditor({
   showBasePlan = true,
   onSaveNew,
   onOverwrite,
+  onBlockChange,
 }) {
   const [rows, setRows] = useState(() =>
     (initialRows || []).map(r => ({ ...r, months: { ...r.months } }))
@@ -244,7 +245,8 @@ export default function DistributionEditor({
     setEdited(new Set())
     setEditing(null)
     setPopover(null)
-  }, [baseRows])
+    onBlockChange?.('__base__')
+  }, [baseRows, onBlockChange])
 
   const loadBlock = useCallback((block) => {
     setRows((block.inputs || []).map(r => ({ ...r, months: { ...r.months } })))
@@ -252,7 +254,8 @@ export default function DistributionEditor({
     setEdited(new Set())
     setEditing(null)
     setPopover(null)
-  }, [])
+    onBlockChange?.(block.id)
+  }, [onBlockChange])
 
   const handleSaveNew = (name) => {
     const snapshot = rows.map(r => ({ ...r, months: { ...r.months } }))

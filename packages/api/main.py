@@ -1,7 +1,9 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel
 from pathlib import Path
+from typing import List, Optional
 import json
 import sys
 import tempfile
@@ -56,6 +58,12 @@ async def extract_workbook(file: UploadFile = File(...)):
     finally:
         tmp_path.unlink(missing_ok=True)
 
+    # Persist for /api/compute
+    processed_dir = REPO_ROOT / "data" / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    (processed_dir / "config.json").write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+    (processed_dir / "inputs.json").write_text(json.dumps(inputs, ensure_ascii=False), encoding="utf-8")
+
     _add_account_periods(results)
 
     return {
@@ -76,6 +84,63 @@ def _add_account_periods(results: dict) -> None:
             period_totals[p]["gross_sales"] += row.get("gross_sales", 0) or 0
             period_totals[p]["unit_sales"]  += row.get("unit_sales",  0) or 0
     results["account_periods"] = period_totals
+
+
+class DistributionRow(BaseModel):
+    SKU_name: str
+    unit_velocity: float
+    months: dict          # {"Jul": 48.5, "Aug": 52.0, ...}  values 0–100
+    dist_prob: float      # 0–100
+
+class ComputeRequest(BaseModel):
+    distribution_rows: Optional[List[DistributionRow]] = None
+
+
+@app.post("/api/compute")
+async def compute_scenario(req: ComputeRequest):
+    config_path = REPO_ROOT / "data" / "processed" / "config.json"
+    inputs_path = REPO_ROOT / "data" / "processed" / "inputs.json"
+    if not config_path.exists() or not inputs_path.exists():
+        raise HTTPException(404, "No base data on server — upload a DAP file first.")
+
+    cfg = json.loads(config_path.read_text(encoding="utf-8"))
+    inp = json.loads(inputs_path.read_text(encoding="utf-8"))
+
+    # month abbreviation → period id  (e.g. "Jul" → "P01")
+    month_to_period: dict = {}
+    for period, info in cfg.get("fiscal_calendar", {}).items():
+        m = (info.get("month") or "")[:3]
+        if m:
+            month_to_period[m] = period
+
+    if req.distribution_rows:
+        for row in req.distribution_rows:
+            sku = inp.get("skus", {}).get(row.SKU_name)
+            if not sku:
+                continue
+            sku["velocity"] = row.unit_velocity
+            periods = sku.get("periods", {})
+            for month, pct in row.months.items():
+                period = month_to_period.get(month[:3])
+                if period and period in periods:
+                    periods[period]["acv_pct"] = pct / 100.0
+            prob = row.dist_prob / 100.0
+            for p in sku.get("probability", {}):
+                sku["probability"][p] = prob
+
+    try:
+        results = run_account(cfg, inp)
+    except Exception as e:
+        raise HTTPException(422, str(e))
+
+    _add_account_periods(results)
+    at = results.get("account_total", {})
+    return {
+        "grossSales": at.get("gross_sales")  or 0,
+        "tradeRate":  (at.get("allin_trade_rate_pct") or 0) / 100,
+        "netSales":   at.get("net_sales")    or 0,
+        "totalSpend": at.get("total_spend")  or 0,
+    }
 
 
 def _merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
