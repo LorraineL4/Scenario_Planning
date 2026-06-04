@@ -47,10 +47,48 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
 
   useEffect(() => {
     if (!scenario) return
+
     const distBlock = pendingDistId && pendingDistId !== '__base__'
       ? (blocks.distribution || []).find(b => b.id === pendingDistId) || null
       : null
     const rows = distBlock?.inputs || null
+
+    const pricingBlock = pendingPricingId && pendingPricingId !== '__base__'
+      ? (blocks.pricing || []).find(b => b.id === pendingPricingId) || null
+      : null
+    const pricingRows = pricingBlock?.inputs
+      ? Object.entries(pricingBlock.inputs).map(([skuName, skuData]) => ({
+          sku_name: skuName,
+          periods: skuData.periods || {},
+        }))
+      : null
+
+    const promoBlock = pendingPromoId && pendingPromoId !== '__base__'
+      ? (blocks.promotion || []).find(b => b.id === pendingPromoId) || null
+      : null
+    let promoRows = null
+    if (promoBlock) {
+      const skuPeriodMap = {}
+      for (const [cellKey, cellData] of Object.entries(promoBlock.inputs?.grid || {})) {
+        const sepIdx = cellKey.indexOf('|||')
+        if (sepIdx < 0) continue
+        const skuName = cellKey.slice(0, sepIdx)
+        const period  = cellKey.slice(sepIdx + 3)
+        if (!skuPeriodMap[skuName]) skuPeriodMap[skuName] = {}
+        skuPeriodMap[skuName][period] = {
+          promo_price: cellData.promo_price,
+          weeks: cellData.weeks,
+          scan: cellData.scan,
+          fixed_fee: cellData.fixed_fee,
+          expected_lift: cellData.expected_lift,
+        }
+      }
+      promoRows = Object.entries(skuPeriodMap).map(([skuName, periods]) => ({
+        sku_name: skuName,
+        periods,
+      }))
+    }
+
     fetch('/api/compute', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -61,12 +99,14 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           months: r.months,
           dist_prob: r.dist_prob,
         })) : null,
+        pricing_rows: pricingRows,
+        promo_rows: promoRows,
       }),
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => setComputedFinancials(data))
       .catch((err) => console.error('[compute]', err))
-  }, [pendingDistId])  // eslint-disable-line
+  }, [pendingDistId, pendingPricingId, pendingPromoId])  // eslint-disable-line
 
   const isDistDirty    = pendingDistId    !== savedDistId
   const isPromoDirty   = pendingPromoId   !== savedPromoId

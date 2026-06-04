@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from pathlib import Path
-from typing import List, Optional
+from typing import Dict, List, Optional
 import json
 import sys
 import tempfile
@@ -92,8 +92,33 @@ class DistributionRow(BaseModel):
     months: dict          # {"Jul": 48.5, "Aug": 52.0, ...}  values 0–100
     dist_prob: float      # 0–100
 
+class PricingPeriodOverride(BaseModel):
+    base_price: Optional[float] = None
+    gross_price: Optional[float] = None
+    edlp_direct: Optional[float] = None
+    price_impact_manual: Optional[float] = None
+    upcharge_dist_pct: Optional[float] = None
+    edlp_mcb_pct: Optional[float] = None
+
+class PricingSkuOverride(BaseModel):
+    sku_name: str
+    periods: Dict[str, PricingPeriodOverride] = {}
+
+class PromoCellOverride(BaseModel):
+    promo_price: Optional[float] = None
+    weeks: Optional[int] = None
+    scan: Optional[float] = None
+    fixed_fee: Optional[float] = None
+    expected_lift: Optional[float] = None
+
+class PromoSkuOverride(BaseModel):
+    sku_name: str
+    periods: Dict[str, Optional[PromoCellOverride]] = {}
+
 class ComputeRequest(BaseModel):
     distribution_rows: Optional[List[DistributionRow]] = None
+    pricing_rows: Optional[List[PricingSkuOverride]] = None
+    promo_rows: Optional[List[PromoSkuOverride]] = None
 
 
 @app.post("/api/compute")
@@ -135,6 +160,51 @@ async def compute_scenario(req: ComputeRequest):
                 for p, _ in sku["effective_velocity_by_period"].items():
                     acv = sku.get("periods", {}).get(p, {}).get("acv_pct", 0)
                     sku["effective_velocity_by_period"][p] = row.unit_velocity * acv * prob
+
+    if req.pricing_rows:
+        for row in req.pricing_rows:
+            sku = inp.get("skus", {}).get(row.sku_name)
+            if not sku:
+                continue
+            # upcharge_dist_pct is static per SKU — take from any period and write to static_inputs
+            for pdata in row.periods.values():
+                if pdata.upcharge_dist_pct is not None:
+                    sku.setdefault("static_inputs", {})["upcharge_dist_pct"] = pdata.upcharge_dist_pct
+                    break
+            for period_id, pdata in row.periods.items():
+                p = sku.get("periods", {}).get(period_id)
+                if p is None:
+                    continue
+                if pdata.base_price          is not None: p["base_price"]          = pdata.base_price
+                if pdata.gross_price         is not None: p["gross_price"]         = pdata.gross_price
+                if pdata.edlp_direct         is not None: p["edlp_direct"]         = pdata.edlp_direct
+                if pdata.price_impact_manual is not None: p["price_impact_manual"] = pdata.price_impact_manual
+                if pdata.edlp_mcb_pct        is not None: p["edlp_mcb_pct"]        = pdata.edlp_mcb_pct
+
+    if req.promo_rows is not None:
+        # Promo block is active: clear all promo slots for all SKUs, then apply block
+        for sku_data in inp.get("skus", {}).values():
+            for p_data in sku_data.get("periods", {}).values():
+                for slot in ("1", "2"):
+                    p_data[f"name_promo{slot}"]         = None
+                    p_data[f"price_promo{slot}"]        = None
+                    p_data[f"weeks_event_promo{slot}"]  = None
+                    p_data[f"scan_promo{slot}"]         = None
+                    p_data[f"fixed_promo{slot}"]        = None
+                    p_data[f"lift_promo{slot}"]         = None
+        for row in req.promo_rows:
+            sku = inp.get("skus", {}).get(row.sku_name)
+            if not sku:
+                continue
+            for period_id, cell in row.periods.items():
+                p = sku.get("periods", {}).get(period_id)
+                if p is None or cell is None:
+                    continue
+                p["price_promo1"]       = cell.promo_price
+                p["weeks_event_promo1"] = cell.weeks
+                p["scan_promo1"]        = cell.scan
+                p["fixed_promo1"]       = cell.fixed_fee
+                p["lift_promo1"]        = cell.expected_lift
 
     try:
         results = run_account(cfg, inp)
