@@ -41,7 +41,6 @@ function BasePlanCard({ label, onEdit, onDelete }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--muted)' }}>Original plan</div>
     </div>
   )
 }

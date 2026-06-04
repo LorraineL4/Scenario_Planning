@@ -87,15 +87,15 @@ export default function ScenarioComposerView({ blocks, existingCount = 0, onSave
   const [promoId, setPromoId] = useState('__base__')
 
   const distOptions = [
-    { id: '__base__', name: 'Base Distribution', note: 'Original plan', isBase: true },
+    { id: '__base__', name: 'Base Distribution', isBase: true },
     ...blocks.distribution,
   ]
   const pricingOptions = [
-    { id: '__base__', name: 'Base Pricing', note: 'Original plan', isBase: true },
+    { id: '__base__', name: 'Base Pricing', isBase: true },
     ...(blocks.pricing || []),
   ]
   const promoOptions = [
-    { id: '__base__', name: 'Base Promotion', note: 'Original plan', isBase: true },
+    { id: '__base__', name: 'Base Promotion', isBase: true },
     ...(blocks.promotion || []),
   ]
 
