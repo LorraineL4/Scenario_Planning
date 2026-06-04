@@ -143,7 +143,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   }
   const handleOverwriteDist = (blockId, data) => {
     onOverwrite?.(blockId, data)
-    autoSave({ distributionId: blockId })
+    if (blockId !== '__base__') autoSave({ distributionId: blockId })
     setBlockRevision(r => r + 1)
   }
   const handleCreatePromoBlock = (id, name, data) => {
@@ -307,8 +307,9 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         ))}
       </div>
 
-      {/* Missing block warnings */}
-      {pendingDistId && pendingDistId !== '__base__' && !distBlock && (
+      {/* Missing block warning — only when the pending block ID can't be found */}
+      {pendingDistId && pendingDistId !== '__base__' &&
+       !(blocks.distribution || []).find(b => b.id === pendingDistId) && (
         <div style={{ margin: '8px 20px 0', padding: '8px 12px', borderRadius: 7, background: '#fef3e2', color: '#9a5900', fontSize: 12.5, fontWeight: 500 }}>
           ⚠ Distribution block no longer exists — showing base data.
         </div>

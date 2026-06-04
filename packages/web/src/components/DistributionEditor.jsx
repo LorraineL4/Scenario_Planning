@@ -272,10 +272,10 @@ export default function DistributionEditor({
     if (activeBlock) {
       onOverwrite?.(activeBlock.id, snapshot)
     } else {
-      const id = `dist-${Date.now()}`
-      onSaveNew?.(id, 'Base Distribution', snapshot)
-      setActiveBlock({ id, name: 'Base Distribution', inputs: snapshot })
-      onBlockChange?.(id)
+      // No active block — write back to base rows directly rather than creating
+      // a confusingly-named duplicate "Base Distribution" block.
+      onOverwrite?.('__base__', snapshot)
+      onBlockChange?.('__base__')
     }
     setSaveModalOpen(false)
   }
