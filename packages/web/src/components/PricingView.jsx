@@ -8,7 +8,7 @@ const INPUT_FIELDS = [
   { key: 'base_price',          label: 'Everyday Price',       type: 'dollar'      },
   { key: 'gross_price',         label: 'Gross Price',          type: 'dollar'      },
   { key: 'edlp_direct',        label: 'EDP Subsidization',    type: 'dollar'      },
-  { key: 'price_impact_manual', label: 'Price Chng vs EDP',   type: 'pct_decimal' },
+  { key: 'price_impact_manual', label: 'Price Impact %',       type: 'pct_decimal' },
   { key: 'upcharge_dist_pct',   label: 'Dist Upcharge',       type: 'pct_decimal' },
 ]
 
