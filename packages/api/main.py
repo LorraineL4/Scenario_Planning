@@ -128,6 +128,14 @@ async def compute_scenario(req: ComputeRequest):
             for p in sku.get("probability", {}):
                 sku["probability"][p] = prob
 
+            # effective_velocity_by_period is the baseline the engine actually reads.
+            # Recompute it from the new velocity × acv_pct × probability so the
+            # engine reflects the block's overrides rather than the extracted defaults.
+            if "effective_velocity_by_period" in sku:
+                for p, _ in sku["effective_velocity_by_period"].items():
+                    acv = sku.get("periods", {}).get(p, {}).get("acv_pct", 0)
+                    sku["effective_velocity_by_period"][p] = row.unit_velocity * acv * prob
+
     try:
         results = run_account(cfg, inp)
     except Exception as e:

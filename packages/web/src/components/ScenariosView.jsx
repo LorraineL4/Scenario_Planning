@@ -41,8 +41,8 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
 
   useEffect(() => {
     if (isBase || !scenario) return
-    const distBlock = scenario.distributionId && scenario.distributionId !== '__base__'
-      ? (blocks.distribution || []).find(b => b.id === scenario.distributionId) || null
+    const distBlock = pendingDistId && pendingDistId !== '__base__'
+      ? (blocks.distribution || []).find(b => b.id === pendingDistId) || null
       : null
     const rows = distBlock?.inputs || null
     fetch('/api/compute', {
@@ -59,8 +59,8 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
     })
       .then(r => r.ok ? r.json() : null)
       .then(data => setComputedFinancials(data))
-      .catch(() => {})
-  }, [scenario?.distributionId])  // eslint-disable-line
+      .catch((err) => console.error('[compute]', err))
+  }, [pendingDistId])  // eslint-disable-line
 
   const isDistDirty = !isBase && pendingDistId !== savedDistId
 

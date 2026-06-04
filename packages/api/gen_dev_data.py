@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """
-gen_dev_data.py — Pre-extract a DAP workbook to JSON for fast UI development.
+gen_dev_data.py — Rebuild dev_data.json from already-extracted config.json + inputs.json.
 
-Usage:
-    cd "260528 - Scenario Planning"
-    python packages/api/gen_dev_data.py "data/raw/260413 - WFM_CORP - DAP.xlsx"
+Run extract_config.py and extract_inputs.py on your DAP file first, then:
+
+    python packages/api/gen_dev_data.py
 
 Output: data/processed/dev_data.json  (gitignored)
-Shape:  same as /api/extract response — { fiscal_calendar, account, skus }
+Shape:  same as /api/extract response — { fiscal_calendar, account, skus, results }
 """
 
 import json
@@ -18,8 +18,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 ENGINE_DIR = REPO_ROOT / "packages" / "engine"
 sys.path.insert(0, str(ENGINE_DIR))
 
-from extract_config import extract as extract_config
-from extract_inputs import extract as extract_inputs
 from run_account import run_account
 
 
@@ -42,16 +40,20 @@ def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
 
 
 def main():
-    if len(sys.argv) < 2:
-        sys.exit("Usage: python gen_dev_data.py <path-to-DAP.xlsx>")
+    config_path = REPO_ROOT / "data" / "processed" / "config.json"
+    inputs_path = REPO_ROOT / "data" / "processed" / "inputs.json"
 
-    xlsx_path = Path(sys.argv[1])
-    if not xlsx_path.exists():
-        sys.exit(f"File not found: {xlsx_path}")
+    if not config_path.exists() or not inputs_path.exists():
+        sys.exit(
+            "config.json or inputs.json not found in data/processed/.\n"
+            "Run extract_config.py and extract_inputs.py on your DAP file first:\n"
+            "  python packages/engine/extract_config.py \"data/raw/<DAP>.xlsx\" --output data/processed/config.json\n"
+            "  python packages/engine/extract_inputs.py \"data/raw/<DAP>.xlsx\" --output data/processed/inputs.json"
+        )
 
-    print(f"Extracting {xlsx_path.name}...")
-    config  = extract_config(xlsx_path)
-    inputs  = extract_inputs(xlsx_path)
+    print(f"Reading {config_path.name} and {inputs_path.name}...")
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+    inputs = json.loads(inputs_path.read_text(encoding="utf-8"))
 
     print("Running engine...")
     results = run_account(config, inputs)
