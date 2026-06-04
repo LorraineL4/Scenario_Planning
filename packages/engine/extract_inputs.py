@@ -3,7 +3,8 @@
 extract_inputs.py  —  Extract per-period scenario inputs from a DAP Excel workbook.
 
 Reads:
-  Distribution   → per-SKU ACV % by period
+  Account Info   → account setup (stores, rates, channel, etc.) — editable defaults
+  Distribution   → per-SKU velocity, ACV %, probability by period
   Product Group  → per-SKU, per-period pricing and promo inputs
 
 Usage:
@@ -13,22 +14,26 @@ Usage:
 
 Output JSON shape:
   {
+    "account": { account_name, sales_channel, number_of_stores, rates... },
     "skus": {
       "<sku_name>": {
         "velocity":                 float,
         "slotting_lump_sum":        float,
         "slotting_per_store":       float,
         "slotting_cases_per_store": float,
+        "probability":              { P01-P12: float },
+        "effective_velocity_by_period": { P01-P12: float },
         "current_inputs":           { base_price, gross_price, ... all promo fields ... },
         "periods": {
-          "P01": { acv_pct, base_price, gross_price, edlp_direct, ... all promo fields ..., cogs },
+          "P01": { acv_pct, base_price, gross_price, edlp_direct, ... all promo fields ... },
           ...
         }
       }
     }
   }
 
-NOTE: Output contains client financial data — do not commit to git.
+NOTE: cogs is in config.json (static_inputs per SKU), not here.
+NOTE: Output contains client data — do not commit to git.
       Recommended: write to data/processed/ (gitignored).
 """
 
@@ -45,20 +50,47 @@ try:
 except ImportError:
     sys.exit("openpyxl not installed.  Run:  pip install openpyxl")
 
-from extract_config import PERIODS, PERIOD_COL, _coerce, _num, _is_pg_sheet
+from extract_config import (
+    PERIODS, PERIOD_COL, _coerce, _num, _is_pg_sheet,
+    load_fiscal_calendar, load_pg_list, _col_letter_to_num,
+)
 
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-# Per-period input rows from Product Group sheets (per_period=True in dap-reference.json)
+# Account Info cells — engagement-level defaults, editable in the web app.
+# Extracted here (not config) because they vary per engagement and can be overridden per scenario.
+ACCOUNT_CELLS = {
+    "D3":  "account_name",
+    "D4":  "sales_manager",
+    "D5":  "sales_channel",
+    "D6":  "pricing_strategy",
+    "D7":  "primary_distributor",
+    "D8":  "secondary_distributor",
+    "D12": "number_of_stores",
+    "D13": "terms_spoils_pct",
+    "D14": "distributor_program_pct",
+    "D15": "digital_sales_pct",
+    "D16": "other_program_pct",
+    "G4":  "tpr_fee",
+    "G5":  "tpr_length_weeks",
+    "G6":  "ad_fee",
+    "G7":  "ad_length_weeks",
+    "G8":  "min_pct_to_execute",
+    "G9":  "can_execute_scans",
+}
+
+# Per-period input rows from Product Group sheets.
+# NOTE: cogs (row 147) is now in extract_config.PG_STATIC_INPUTS — it is a fixed cost per SKU,
+# not a per-period user input. Run extract_config.py to get it under skus[sku]["static_inputs"]["cogs"].
 PG_PERIOD_INPUTS = {
     # Everyday pricing
     "base_price":               {"row": 10},
     "gross_price":              {"row": 11},
     "edlp_direct":              {"row": 12},
-    "price_impact_manual":      {"row": 13},
+    "price_impact_manual":      {"row": 14},
     "edlp_mcb_pct":             {"row": 25},
     "misc_impact_pct":          {"row": 31},
     # Promo slot 1
@@ -91,29 +123,33 @@ PG_PERIOD_INPUTS = {
     "buyout_weeks_promo2":      {"row": 90},
     "buyout_amount_promo2":     {"row": 91},
     "brick_promo2":             {"row": 93},
-    # Cost
-    "cogs":                     {"row": 147},
 }
 
 _DIST_COL_SKU_NAME       = 2   # B — Product Group name
 _DIST_COL_VELOCITY       = 12  # L — Account Base Unit Velocity (units/store/week)
-_DIST_COL_ACV_CURRENT    = 14  # N — current account ACV % (prior-period base for P01 delta formula)
-_DIST_COL_ACV_P01        = 16  # P = P01; Q=P02 … AA=P12 (stored as whole %, e.g. 99.52)
-_DIST_COL_PROB_P01       = 74  # BV = P01 probability; BW=P02 … CG=P12 (BV-CH span P01-P13)
+_DIST_COL_ACV_CURRENT    = 14  # N — current account ACV % (prior-period base for P01 delta)
+_DIST_COL_ACV_P01        = 16  # P = P01; Q=P02 … AA=P12 (whole %, e.g. 99.52)
+_DIST_COL_PROB_P01       = 74  # BV = P01 probability; BW=P02 … CG=P12
 _DIST_COL_SLOT_LUMP      = 39  # AM — slotting lump sum
-_DIST_COL_SLOT_PER_STORE = 40  # AN
-_DIST_COL_SLOT_CASES     = 41  # AO
+_DIST_COL_SLOT_PER_STORE = 40  # AN — slotting per store
+_DIST_COL_SLOT_CASES     = 41  # AO — slotting cases per store
 _DIST_DATA_START_ROW  = 7
 _DIST_HEADER_KEYWORDS = {"SKU", "PRODUCT", "ITEM", "NAME", "GROUP", "DESCRIPTION"}
 
-_PG_COL_CURRENT = 4  # D — current values column in PG sheets (before P01–P12 at E–P)
+_PG_COL_CURRENT = 4  # D — current values column in PG sheets (before P01–P12 at E onward)
 
 
 # ---------------------------------------------------------------------------
 # Extractors
 # ---------------------------------------------------------------------------
 
-def extract_distribution_inputs(wb) -> dict:
+def extract_account_info(wb) -> dict:
+    """Extract account-level defaults from the Account Info tab."""
+    ws = wb["Account Info"]
+    return {field: _coerce(ws[cell].value) for cell, field in ACCOUNT_CELLS.items()}
+
+
+def extract_distribution_inputs(wb, periods=None, period_col=None) -> dict:
     """Returns {pg_name: {velocity, acv_pct, effective_velocity_by_period, ...}}.
 
     The Distribution sheet is at item level — col B is the Product Group (PG) name,
@@ -129,11 +165,13 @@ def extract_distribution_inputs(wb) -> dict:
     current_acv = col N; scenario acv = cols P–AA; per-period prob = cols BV–CG.
     ACV values stored as whole % in Excel (e.g. 99.52); converted to decimal (0.9952).
     """
+    if periods is None:
+        periods = PERIODS
+
     ws = wb["Distribution"]
 
-    # Accumulate per PG: effective_velocity[p] += velocity_i × acv_pct_i[p]
-    pg_effective: dict = {}   # pg_name → {P01-P12: float}
-    pg_primary:   dict = {}   # pg_name → first non-zero row data (for velocity/acv UI fields)
+    pg_effective: dict = {}   # pg_name → {period: float}
+    pg_primary:   dict = {}   # pg_name → first non-zero row data (velocity/acv for UI fields)
     pg_slotting:  dict = {}   # pg_name → slotting (sum across items)
 
     for row in ws.iter_rows(min_row=_DIST_DATA_START_ROW, values_only=False):
@@ -151,47 +189,41 @@ def extract_distribution_inputs(wb) -> dict:
         current_acv = (get(_DIST_COL_ACV_CURRENT) or 0.0) / 100.0
 
         acv_pct = {}
-        for i, p in enumerate(PERIODS):
+        for i, p in enumerate(periods):
             raw_acv = get(_DIST_COL_ACV_P01 + i)
             acv_pct[p] = (raw_acv / 100.0) if raw_acv is not None else 0.0
 
         prob = {}
-        for i, p in enumerate(PERIODS):
+        for i, p in enumerate(periods):
             raw_prob = get(_DIST_COL_PROB_P01 + i)
             prob[p] = raw_prob if raw_prob is not None else 1.0
 
         # Effective ACV = prior weighted ACV + (raw ACV delta) × probability
-        # Delta uses raw scenario ACV differences; base accumulates the weighted value.
-        # effective_acv[p] = effective_acv[p-1] + (raw[p] - raw[p-1]) × prob[p]
         effective_acv = {}
         prev_weighted = current_acv
-        prev_raw      = current_acv  # raw ACV[p-1]; col N for P01
-        for p in PERIODS:
+        prev_raw      = current_acv
+        for p in periods:
             effective_acv[p] = prev_weighted + (acv_pct[p] - prev_raw) * prob[p]
             prev_weighted = effective_acv[p]
             prev_raw      = acv_pct[p]
 
-        # Accumulate SUMPRODUCT contribution for this item into the PG total
         if name not in pg_effective:
-            pg_effective[name] = {p: 0.0 for p in PERIODS}
-        for p in PERIODS:
+            pg_effective[name] = {p: 0.0 for p in periods}
+        for p in periods:
             pg_effective[name][p] += velocity * effective_acv[p]
 
-        # Keep slotting sum across all items in the PG
         slot = get(_DIST_COL_SLOT_LUMP) or 0.0
         pg_slotting[name] = pg_slotting.get(name, 0.0) + slot
 
-        # Keep first non-zero item row for UI-facing velocity / acv_pct / probability fields
         if name not in pg_primary and velocity > 0:
             pg_primary[name] = {
                 "velocity":                 velocity,
                 "slotting_per_store":       get(_DIST_COL_SLOT_PER_STORE),
                 "slotting_cases_per_store": get(_DIST_COL_SLOT_CASES),
-                "acv_pct":                  {p: acv_pct[p] for p in PERIODS},
-                "probability":              {p: prob[p] for p in PERIODS},
+                "acv_pct":                  {p: acv_pct[p] for p in periods},
+                "probability":              {p: prob[p] for p in periods},
             }
 
-    # Merge into final output
     pgs = {}
     for name in pg_effective:
         primary = pg_primary.get(name, {})
@@ -200,8 +232,8 @@ def extract_distribution_inputs(wb) -> dict:
             "slotting_lump_sum":          pg_slotting.get(name, 0.0),
             "slotting_per_store":         primary.get("slotting_per_store"),
             "slotting_cases_per_store":   primary.get("slotting_cases_per_store"),
-            "acv_pct":                    primary.get("acv_pct", {p: 0.0 for p in PERIODS}),
-            "probability":                primary.get("probability", {p: 1.0 for p in PERIODS}),
+            "acv_pct":                    primary.get("acv_pct", {p: 0.0 for p in periods}),
+            "probability":                primary.get("probability", {p: 1.0 for p in periods}),
             # Pre-computed SUMPRODUCT baseline rate (per store per week) for this PG per period.
             # dist_baseline = effective_velocity[p] × number_of_stores
             "effective_velocity_by_period": pg_effective[name],
@@ -209,14 +241,16 @@ def extract_distribution_inputs(wb) -> dict:
     return pgs
 
 
-def extract_pg_inputs(ws) -> dict:
+def extract_pg_inputs(ws, period_col=None) -> dict:
     """Extract per-period scenario inputs and current values from a PG sheet.
 
     Returns {"periods": {P01-P12: {field: value}}, "current": {field: value}}.
     "current" holds col D values — the pre-scenario baseline for pricing/promo fields.
     """
+    if period_col is None:
+        period_col = PERIOD_COL
     periods = {}
-    for period, col in PERIOD_COL.items():
+    for period, col in period_col.items():
         period_data = {}
         for field, meta in PG_PERIOD_INPUTS.items():
             period_data[field] = _coerce(ws.cell(row=meta["row"], column=col).value)
@@ -238,20 +272,29 @@ def extract(excel_path: Path) -> dict:
     wb = openpyxl.load_workbook(str(excel_path), data_only=True)
     all_sheets = wb.sheetnames
 
+    # Load fiscal calendar and PG list dynamically from Helpers + Month tabs
+    fiscal_calendar = load_fiscal_calendar(wb)
+    periods    = list(fiscal_calendar.keys())
+    period_col = {p: _col_letter_to_num(d["col"]) for p, d in fiscal_calendar.items()}
+    pg_list    = load_pg_list(wb)
+
+    print("  [+] Account Info", flush=True)
+    account = extract_account_info(wb)
+
     print("  [+] Distribution (velocity + ACV % by period)", flush=True)
-    dist_inputs = extract_distribution_inputs(wb)
+    dist_inputs = extract_distribution_inputs(wb, periods=periods)
     print(f"      {len(dist_inputs)} SKU(s): {list(dist_inputs)}", flush=True)
 
-    pg_names = [s for s in all_sheets if _is_pg_sheet(wb, s)]
+    pg_names = [name for name in pg_list if name in all_sheets]
     print(f"  [+] Product Group sheets ({len(pg_names)} found):", flush=True)
 
     skus = {}
     for name in pg_names:
         print(f"      - {name}", flush=True)
-        pg_data = extract_pg_inputs(wb[name])
+        pg_data = extract_pg_inputs(wb[name], period_col=period_col)
         dist = dist_inputs.get(name, {})
-        acv = dist.get("acv_pct", {})
-        for period in PERIODS:
+        acv  = dist.get("acv_pct", {})
+        for period in periods:
             pg_data["periods"][period]["acv_pct"] = acv.get(period)
         skus[name] = {
             "velocity":                     dist.get("velocity"),
@@ -270,7 +313,8 @@ def extract(excel_path: Path) -> dict:
             "extracted_at":    datetime.now(timezone.utc).isoformat(),
             "pg_sheets_found": pg_names,
         },
-        "skus": skus,
+        "account": account,
+        "skus":    skus,
     }
 
 
@@ -304,7 +348,7 @@ def main():
 
     n_skus = len(data["skus"])
     print(f"\nWrote {out}  ({out.stat().st_size:,} bytes)")
-    print(f"  {n_skus} SKU(s)  |  {len(PERIODS)} periods each")
+    print(f"  {n_skus} SKU(s)  |  12 periods each")
 
 
 if __name__ == "__main__":

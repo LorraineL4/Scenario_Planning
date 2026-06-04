@@ -37,7 +37,7 @@ try:
 except ImportError:
     sys.exit("openpyxl not installed.  Run:  pip install openpyxl")
 
-from extract_config import PERIODS, PERIOD_COL, _num, _is_pg_sheet
+from extract_config import PERIODS, PERIOD_COL, _num, _is_pg_sheet, load_fiscal_calendar, load_pg_list, _col_letter_to_num
 
 # Maps engine output field name → PG sheet row number
 OUTPUT_ROWS = {
@@ -60,10 +60,12 @@ OUTPUT_ROWS = {
 }
 
 
-def extract_pg_expected(ws) -> dict:
+def extract_pg_expected(ws, period_col=None) -> dict:
     """Extract per-period expected outputs from a PG sheet."""
+    if period_col is None:
+        period_col = PERIOD_COL
     periods = {}
-    for period, col in PERIOD_COL.items():
+    for period, col in period_col.items():
         period_data = {}
         for field, row in OUTPUT_ROWS.items():
             period_data[field] = _num(ws.cell(row=row, column=col).value)
@@ -75,13 +77,17 @@ def extract(excel_path: Path) -> dict:
     print(f"Loading {excel_path.name} ...", flush=True)
     wb = openpyxl.load_workbook(str(excel_path), data_only=True)
 
-    pg_names = [s for s in wb.sheetnames if _is_pg_sheet(wb, s)]
+    fiscal_calendar = load_fiscal_calendar(wb)
+    period_col = {p: _col_letter_to_num(d["col"]) for p, d in fiscal_calendar.items()}
+    pg_list    = load_pg_list(wb)
+
+    pg_names = [s for s in wb.sheetnames if _is_pg_sheet(wb, s, pg_names=pg_list)]
     print(f"  [+] Product Group sheets ({len(pg_names)} found):", flush=True)
 
     skus = {}
     for name in pg_names:
         print(f"      - {name}", flush=True)
-        skus[name] = extract_pg_expected(wb[name])
+        skus[name] = extract_pg_expected(wb[name], period_col=period_col)
 
     return {
         "_meta": {
