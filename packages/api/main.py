@@ -13,6 +13,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 
 from extract_config import extract as extract_config
 from extract_inputs import extract as extract_inputs
+from run_account import run_account
 
 app = FastAPI(title="Scenario Planning API", version="0.1.0")
 
@@ -47,18 +48,34 @@ async def extract_workbook(file: UploadFile = File(...)):
         tmp_path = Path(tmp.name)
 
     try:
-        config = extract_config(tmp_path)
-        inputs = extract_inputs(tmp_path)
+        config  = extract_config(tmp_path)
+        inputs  = extract_inputs(tmp_path)
+        results = run_account(config, inputs)
     except Exception as e:
         raise HTTPException(422, str(e))
     finally:
         tmp_path.unlink(missing_ok=True)
 
+    _add_account_periods(results)
+
     return {
         "fiscal_calendar": config.get("fiscal_calendar", {}),
         "account":         inputs.get("account", {}),
         "skus":            _merge_skus(config.get("skus", {}), inputs.get("skus", {})),
+        "results":         results,
     }
+
+
+def _add_account_periods(results: dict) -> None:
+    """Roll up per-period gross_sales and unit_sales across all SKUs."""
+    period_totals: dict = {}
+    for sku_data in results.get("skus", {}).values():
+        for p, row in sku_data.get("periods", {}).items():
+            if p not in period_totals:
+                period_totals[p] = {"gross_sales": 0.0, "unit_sales": 0.0}
+            period_totals[p]["gross_sales"] += row.get("gross_sales", 0) or 0
+            period_totals[p]["unit_sales"]  += row.get("unit_sales",  0) or 0
+    results["account_periods"] = period_totals
 
 
 def _merge_skus(config_skus: dict, inputs_skus: dict) -> dict:

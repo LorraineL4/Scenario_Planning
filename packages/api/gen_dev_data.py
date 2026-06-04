@@ -20,6 +20,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 
 from extract_config import extract as extract_config
 from extract_inputs import extract as extract_inputs
+from run_account import run_account
 
 
 def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
@@ -49,13 +50,27 @@ def main():
         sys.exit(f"File not found: {xlsx_path}")
 
     print(f"Extracting {xlsx_path.name}...")
-    config = extract_config(xlsx_path)
-    inputs = extract_inputs(xlsx_path)
+    config  = extract_config(xlsx_path)
+    inputs  = extract_inputs(xlsx_path)
+
+    print("Running engine...")
+    results = run_account(config, inputs)
+
+    # Roll up per-period totals across all SKUs
+    period_totals: dict = {}
+    for sku_data in results.get("skus", {}).values():
+        for p, row in sku_data.get("periods", {}).items():
+            if p not in period_totals:
+                period_totals[p] = {"gross_sales": 0.0, "unit_sales": 0.0}
+            period_totals[p]["gross_sales"] += row.get("gross_sales", 0) or 0
+            period_totals[p]["unit_sales"]  += row.get("unit_sales",  0) or 0
+    results["account_periods"] = period_totals
 
     payload = {
         "fiscal_calendar": config.get("fiscal_calendar", {}),
         "account":         inputs.get("account", {}),
         "skus":            merge_skus(config.get("skus", {}), inputs.get("skus", {})),
+        "results":         results,
     }
 
     out = REPO_ROOT / "data" / "processed" / "dev_data.json"
@@ -63,8 +78,9 @@ def main():
     out.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
 
     n_skus = len(payload["skus"])
+    acct = results["account_total"]
     print(f"Wrote {out}  ({out.stat().st_size:,} bytes)")
-    print(f"  {n_skus} SKU(s) ready for /api/dev-data")
+    print(f"  {n_skus} SKU(s) | gross_sales={acct['gross_sales']:,.0f} | profit={acct['profit_after_total_spend']:,.0f}")
 
 
 if __name__ == "__main__":

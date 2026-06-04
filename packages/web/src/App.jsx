@@ -1,6 +1,25 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { DAP_SAMPLE } from './dap-data.js';
 import { parseDAP } from './dap-xlsx.js';
+
+function devDataToRows(devData) {
+  const cal = devData.fiscal_calendar || {}
+  return Object.entries(devData.skus || {}).map(([name, sku], i) => {
+    const months = {}
+    Object.entries(cal).forEach(([period, info]) => {
+      months[info.month] = Math.round((sku.acv_pct?.[period] || 0) * 100)
+    })
+    const periods = Object.keys(cal)
+    return {
+      id: `dev-${i}`,
+      Product_Group: name,
+      SKU_name: name,
+      unit_velocity: sku.velocity || 0,
+      current_ACV: Math.round((sku.current_acv || 0) * 100),
+      months,
+      dist_prob: Math.round((sku.probability?.[periods[0]] ?? 1.0) * 100),
+    }
+  })
+}
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -148,10 +167,17 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const dragDepth = useRef(0);
 
-  const loadSample = useCallback(() => {
-    const data = (DAP_SAMPLE || []).map((r) => ({ ...r, months: { ...r.months } }));
-    setRows(data); setMeta({ sheet: "Sample data", count: data.length });
-    setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
+  const loadDevData = useCallback(async () => {
+    setLoading(true); setErr(null);
+    try {
+      const res = await fetch('/api/dev-data')
+      if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.detail || res.statusText) }
+      const devData = await res.json()
+      const data = devDataToRows(devData)
+      setRows(data); setMeta({ sheet: devData.account?.account_name || 'Dev data', count: data.length });
+      setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
+    } catch (e) { setErr(e.message || String(e)); }
+    finally { setLoading(false); }
   }, []);
 
   const handleFile = useCallback(async (file) => {
@@ -262,7 +288,9 @@ export default function App() {
               Choose .xlsx file
               <input type="file" accept=".xlsx" hidden onChange={(e) => handleFile(e.target.files[0])} />
             </label>
-            <button className="btn ghost" onClick={loadSample}>Load sample data</button>
+            {import.meta.env.DEV && (
+              <button className="btn ghost" onClick={loadDevData}>Load dev data</button>
+            )}
           </div>
         </div>
         <div className="drop-hint">Drop .xlsx to load</div>
