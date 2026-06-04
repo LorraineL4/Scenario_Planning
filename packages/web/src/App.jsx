@@ -213,6 +213,97 @@ function ApplyPopover({ row, anchor, onApply, onClose }) {
   );
 }
 
+// ─── Save plan modal ────────────────────────────────────────────────────────
+
+function SaveModal({ activeBlock, onOverwrite, onSaveNew, onClose }) {
+  const [step, setStep] = useState(activeBlock ? 'choice' : 'name');
+  const [name, setName] = useState('');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    if (step === 'name') inputRef.current?.focus();
+  }, [step]);
+
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, [onClose]);
+
+  const optBtn = (onClick, title, sub, primary) => (
+    <button onClick={onClick} style={{
+      padding: '12px 16px', borderRadius: 10, border: '1px solid var(--line)',
+      background: primary ? 'var(--navy)' : 'var(--panel)',
+      color: primary ? '#fff' : 'var(--ink)',
+      fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%',
+    }}>
+      <div>{title}</div>
+      <div style={{ fontSize: 12, fontWeight: 500, marginTop: 3, opacity: primary ? 0.8 : 1, color: primary ? 'inherit' : 'var(--muted)' }}>{sub}</div>
+    </button>
+  );
+
+  return (
+    <div
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      style={{
+        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
+      }}
+    >
+      <div style={{ background: 'var(--panel)', borderRadius: 14, padding: '28px 28px 24px', width: 380, boxShadow: '0 8px 40px rgba(0,0,0,.2)' }}>
+        {step === 'choice' ? (
+          <>
+            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save plan</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
+              {optBtn(() => setStep('name'), 'Save as new plan', 'Create a new named snapshot')}
+            </div>
+            <button onClick={onClose} style={{
+              marginTop: 14, width: '100%', padding: '8px', borderRadius: 8, border: 'none',
+              background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+            }}>Cancel</button>
+          </>
+        ) : (
+          <>
+            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save as new plan</div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>Give this distribution snapshot a name.</div>
+            <input
+              ref={inputRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onSaveNew(name.trim()); }}
+              placeholder="e.g. Conservative, High growth…"
+              style={{
+                width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)',
+                fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)',
+                background: 'var(--panel-2)', boxSizing: 'border-box', marginBottom: 16,
+                outline: 'none',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button onClick={onClose} style={{
+                padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)',
+                background: 'var(--panel)', color: 'var(--ink-2)', fontWeight: 600, fontSize: 13,
+                cursor: 'pointer', fontFamily: 'inherit',
+              }}>Cancel</button>
+              <button
+                onClick={() => name.trim() && onSaveNew(name.trim())}
+                disabled={!name.trim()}
+                style={{
+                  padding: '8px 16px', borderRadius: 8, border: 'none',
+                  background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 13,
+                  cursor: name.trim() ? 'pointer' : 'not-allowed',
+                  opacity: name.trim() ? 1 : 0.45, fontFamily: 'inherit',
+                }}>Save</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── Plan selector dropdown ─────────────────────────────────────────────────
 
 function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
@@ -410,6 +501,7 @@ export default function App() {
   const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
   const [baseRows, setBaseRows]     = useState(null);
   const [activeBlockId, setActiveBlockId] = useState(null);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
@@ -590,6 +682,32 @@ export default function App() {
     }));
   }, [rows]);
 
+  const handleOverwrite = useCallback(() => {
+    if (!activeBlockId) return;
+    setBlocks(b => ({
+      ...b,
+      distribution: b.distribution.map(bl =>
+        bl.id === activeBlockId
+          ? { ...bl, note: `${rows.length} SKUs · saved`, inputs: rows.map(r => ({ ...r, months: { ...r.months } })) }
+          : bl
+      ),
+    }));
+    setSaveModalOpen(false);
+  }, [activeBlockId, rows]);
+
+  const handleSaveNew = useCallback((name) => {
+    if (name.toLowerCase() === 'base plan') {
+      alert('"Base plan" is reserved. Choose a different name.');
+      return;
+    }
+    if (blocks.distribution.some(b => b.name === name)) {
+      alert(`A block named "${name}" already exists. Choose a different name.`);
+      return;
+    }
+    saveDistributionBlock(name);
+    setSaveModalOpen(false);
+  }, [blocks.distribution, saveDistributionBlock]);
+
   const deleteBlock = useCallback((type, id) => {
     setBlocks(b => ({ ...b, [type]: b[type].filter(bl => bl.id !== id) }));
     if (type === 'distribution' && activeBlockId === id && baseRows) {
@@ -694,10 +812,7 @@ export default function App() {
                 <input placeholder="Search SKU or product group…" value={search} onChange={(e) => setSearch(e.target.value)} />
                 {search && <button className="search-x" onClick={() => setSearch("")}>✕</button>}
               </div>
-              <button className="btn sm" onClick={() => {
-                const name = prompt('Name this distribution block:');
-                if (name?.trim()) saveDistributionBlock(name.trim());
-              }}>Save as block…</button>
+              <button className="btn sm" onClick={() => setSaveModalOpen(true)}>Save</button>
               <label className="btn sm">
                 Load file
                 <input type="file" accept=".xlsx" hidden onChange={(e) => handleFile(e.target.files[0])} />
@@ -802,6 +917,15 @@ export default function App() {
             <ScenarioListView scenarios={scenarios} blocks={blocks} onDeleteBlock={deleteBlock} />
           )}
         </div>
+      )}
+
+      {saveModalOpen && (
+        <SaveModal
+          activeBlock={activeBlock}
+          onOverwrite={handleOverwrite}
+          onSaveNew={handleSaveNew}
+          onClose={() => setSaveModalOpen(false)}
+        />
       )}
 
       {dragging && (
