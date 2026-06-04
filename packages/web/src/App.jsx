@@ -552,7 +552,7 @@ export default function App() {
   }, [blocks.distribution, saveDistributionBlock]);
 
   const deleteBlock = useCallback((type, id) => {
-    if (id === '__base__') return; // base blocks are protected
+    if ((blocks[type] || []).length <= 1) return; // keep at least one block per category
     setBlocks(b => ({ ...b, [type]: b[type].filter(bl => bl.id !== id) }));
     if (type === 'distribution' && activeBlockId === id && baseRows) {
       setRows(baseRows.map(r => ({ ...r, months: { ...r.months } })));
