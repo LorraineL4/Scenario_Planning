@@ -202,6 +202,7 @@ PG_STATIC_INPUTS = {
     "upcharge_cat_pct":  {"row": 23},
     "case_count":        {"row": 148},
     "cogs":              {"row": 147},
+    "current_edp":       {"row": 10, "col": 20},  # col T — "Input EDP", reference price for elasticity
 }
 
 
@@ -241,7 +242,7 @@ def extract_pg_config(ws, period_col=None) -> dict:
     }
     p01_col = min(period_col.values()) if period_col else 5
     static = {
-        field: _num(ws.cell(row=meta["row"], column=p01_col).value)
+        field: _num(ws.cell(row=meta["row"], column=meta.get("col", p01_col)).value)
         for field, meta in PG_STATIC_INPUTS.items()
     }
     return {"seasonality": seasonality, "static_inputs": static}

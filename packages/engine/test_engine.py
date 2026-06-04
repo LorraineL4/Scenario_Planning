@@ -107,8 +107,10 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     # --- 2. Price elasticity impact ---
     if inp.price_impact_manual is not None:
         price_elasticity_impact = inp.price_impact_manual
-    else:
+    elif inp.base_price and cfg.current_base_price:
         price_elasticity_impact = (inp.base_price / cfg.current_base_price) ** cfg.constant_elasticity - 1
+    else:
+        price_elasticity_impact = 0.0
 
     # --- 3. Distribution baseline (includes price impact) ---
     raw_dist = inp.dist_baseline_override if inp.dist_baseline_override is not None else inp.velocity * tdp

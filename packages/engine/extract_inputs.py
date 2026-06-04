@@ -130,7 +130,7 @@ _DIST_COL_VELOCITY       = 12  # L — Account Base Unit Velocity (units/store/w
 _DIST_COL_ACV_CURRENT    = 14  # N — current account ACV % (prior-period base for P01 delta)
 _DIST_COL_ACV_P01        = 16  # P = P01; Q=P02 … AA=P12 (whole %, e.g. 99.52)
 _DIST_COL_PROB_P01       = 74  # BV = P01 probability; BW=P02 … CG=P12
-_DIST_COL_SLOT_LUMP      = 39  # AM — slotting lump sum
+_DIST_COL_SLOT_LUMP      = 42  # AP — slotting lump sum
 _DIST_COL_SLOT_PER_STORE = 40  # AN — slotting per store
 _DIST_COL_SLOT_CASES     = 41  # AO — slotting cases per store
 _DIST_DATA_START_ROW  = 7
@@ -254,6 +254,9 @@ def extract_pg_inputs(ws, period_col=None) -> dict:
         period_data = {}
         for field, meta in PG_PERIOD_INPUTS.items():
             period_data[field] = _coerce(ws.cell(row=meta["row"], column=col).value)
+        # Treat row 13 = 0 as "no manual override" — engine will auto-calc from elasticity.
+        if not period_data.get("price_impact_manual"):
+            period_data["price_impact_manual"] = None
         periods[period] = period_data
 
     current = {

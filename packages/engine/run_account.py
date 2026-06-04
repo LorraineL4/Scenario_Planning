@@ -88,10 +88,19 @@ def allocate_slotting(acv_by_period: dict, slotting_lump: float) -> dict:
 # Config / inputs builders (one per SKU per period)
 # ---------------------------------------------------------------------------
 
+def _get_elasticity(cfg_data: dict, sku: str, channel: str) -> float:
+    """Return constant_elasticity for the SKU from sales_rates, matching channel if possible."""
+    rates = [r for r in cfg_data.get("sales_rates", []) if r["product_group"] == sku]
+    channel_rates = [r for r in rates if r["channel"] == channel]
+    match = channel_rates[0] if channel_rates else (rates[0] if rates else None)
+    return match["constant_elasticity"] if match else 0.0
+
+
 def _build_config(cfg_data: dict, inp_data: dict, sku: str, period: str) -> Config:
     acct    = inp_data["account"]
     cal     = cfg_data["fiscal_calendar"][period]
     sku_cfg = cfg_data["skus"][sku]
+    static  = sku_cfg["static_inputs"]
     return Config(
         number_of_stores        = int(acct["number_of_stores"]),
         seasonality_index       = sku_cfg["seasonality"][period] or 1.0,
@@ -100,10 +109,8 @@ def _build_config(cfg_data: dict, inp_data: dict, sku: str, period: str) -> Conf
         distributor_program_pct = acct["distributor_program_pct"] or 0.0,
         digital_sales_pct       = acct["digital_sales_pct"] or 0.0,
         other_program_pct       = acct["other_program_pct"] or 0.0,
-        # elasticity / reference price only matter when price_impact_manual is None;
-        # extracted DAP data always has price_impact_manual set per period
-        constant_elasticity     = 0.0,
-        current_base_price      = 1.0,
+        constant_elasticity     = _get_elasticity(cfg_data, sku, acct.get("sales_channel", "")),
+        current_base_price      = static.get("current_edp") or 0.0,
     )
 
 
