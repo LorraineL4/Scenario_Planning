@@ -10,8 +10,8 @@ const fmt = {
 
 // ─── Save modal ───────────────────────────────────────────────────────────────
 
-export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose, quickSaveName = '' }) {
-  const [step, setStep] = useState('choice')
+export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose }) {
+  const [step, setStep] = useState(activeBlock ? 'choice' : 'name')
   const [name, setName] = useState('')
   const inputRef = useRef(null)
   const typeLabel = blockType.charAt(0).toUpperCase() + blockType.slice(1)
@@ -49,9 +49,7 @@ export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite
             <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save {typeLabel.toLowerCase()} block</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {activeBlock
-                ? optBtn(onOverwrite, `Overwrite "${activeBlock.name}"`, 'Replace the saved block with current values', true)
-                : optBtn(() => onSaveNew(quickSaveName), 'Save', `Save as "${quickSaveName}"`, true)}
+              {optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
               {optBtn(() => setStep('name'), 'Save as new block', 'Create a new named snapshot')}
             </div>
             <button onClick={onClose} style={{
@@ -381,7 +379,6 @@ export default function DistributionEditor({
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
           onClose={() => setSaveModalOpen(false)}
-          quickSaveName={`Block ${blocks.length + 1}`}
         />
       )}
     </>
