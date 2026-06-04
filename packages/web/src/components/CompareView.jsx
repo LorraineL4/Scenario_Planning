@@ -58,6 +58,7 @@ function fetchEnriched(scenario, blocks) {
       const period  = cellKey.slice(sepIdx + 3)
       if (!skuPeriodMap[skuName]) skuPeriodMap[skuName] = {}
       skuPeriodMap[skuName][period] = {
+        name: cellData.name,
         promo_price: cellData.promo_price,
         weeks: cellData.weeks,
         scan: cellData.scan,

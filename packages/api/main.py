@@ -108,6 +108,7 @@ class PricingSkuOverride(BaseModel):
     periods: Dict[str, PricingPeriodOverride] = {}
 
 class PromoCellOverride(BaseModel):
+    name: Optional[str] = None
     promo_price: Optional[float] = None
     weeks: Optional[int] = None
     scan: Optional[float] = None
