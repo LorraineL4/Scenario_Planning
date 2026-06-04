@@ -7,7 +7,6 @@ const fmtN = (v) => v == null ? '—' : Number(v).toLocaleString('en-US', { maxi
 const fmtPct = (v) => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
 
 const METRIC_DEFS = [
-  { key: 'totalUnits',       label: 'Total Units',             fmt: fmtN,   kind: 'num', higher: true  },
   { key: 'grossSales',       label: 'Total Gross Sales',       fmt: fmt$,   kind: 'usd', higher: true  },
   { key: 'workingSpend',     label: 'Total Working Spend',     fmt: fmt$,   kind: 'usd', higher: false },
   { key: 'totalSpend',       label: 'Total Trade',             fmt: fmt$,   kind: 'usd', higher: false },
