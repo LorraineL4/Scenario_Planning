@@ -32,10 +32,15 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, basePricingSnapshot, basePromoSnapshot, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months, onWriteToExcel }) {
+function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months, onWriteToExcel }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
   const [writing, setWriting] = useState(false)
+
+  // Helper: resolve any block including __base__ from the blocks arrays.
+  // Defined early so the compute useEffect can use it.
+  const findBlock = (type, id) =>
+    (blocks[type] || []).find(b => b.id === (id || '__base__')) || null
 
   const isBase = scenario?._isBase === true
   const savedDistId    = scenario?.distributionId || '__base__'
@@ -52,14 +57,12 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   useEffect(() => {
     if (!scenario) return
 
-    const distBlock = pendingDistId && pendingDistId !== '__base__'
-      ? (blocks.distribution || []).find(b => b.id === pendingDistId) || null
-      : null
-    const rows = distBlock?.inputs || null
+    // All blocks (including __base__) are in the blocks arrays — always resolve from there
+    const distBlock    = findBlock('distribution', pendingDistId)
+    const pricingBlock = findBlock('pricing',      pendingPricingId)
+    const promoBlock   = findBlock('promotion',    pendingPromoId)
 
-    const pricingBlock = pendingPricingId && pendingPricingId !== '__base__'
-      ? (blocks.pricing || []).find(b => b.id === pendingPricingId) || null
-      : null
+    const rows = distBlock?.inputs || null
     const pricingRows = pricingBlock?.inputs
       ? Object.entries(pricingBlock.inputs).map(([skuName, skuData]) => ({
           sku_name: skuName,
@@ -67,11 +70,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         }))
       : null
 
-    const promoBlock = pendingPromoId && pendingPromoId !== '__base__'
-      ? (blocks.promotion || []).find(b => b.id === pendingPromoId) || null
-      : null
     let promoRows = null
-    if (promoBlock) {
+    if (promoBlock?.inputs?.grid) {
       const skuPeriodMap = {}
       for (const [cellKey, cellData] of Object.entries(promoBlock.inputs?.grid || {})) {
         const sepIdx = cellKey.indexOf('|||')
@@ -175,26 +175,13 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
     )
   }
 
-  // Resolve the distribution block that this scenario uses
-  const distBlockId = scenario.distributionId || '__base__'
-  const distBlock = (!distBlockId || distBlockId === '__base__')
-    ? null
-    : (blocks.distribution || []).find(b => b.id === distBlockId) || null
+  // Resolved blocks for the sub-tab editors (using saved IDs, not pending)
+  const distBlock    = findBlock('distribution', scenario.distributionId)
+  const promoBlock   = findBlock('promotion',    scenario.promotionId)
+  const pricingBlock = findBlock('pricing',      scenario.pricingId)
 
-  // Resolve the promotion block
-  const promoBlockId = scenario.promotionId || '__base__'
-  const promoBlock = (!promoBlockId || promoBlockId === '__base__')
-    ? null
-    : (blocks.promotion || []).find(b => b.id === promoBlockId) || null
-
-  // Resolve the pricing block
-  const pricingBlockId = scenario.pricingId || '__base__'
-  const pricingBlock = (!pricingBlockId || pricingBlockId === '__base__')
-    ? null
-    : (blocks.pricing || []).find(b => b.id === pricingBlockId) || null
-
-  // Rows to seed the editor with
-  const initialRows = distBlock ? distBlock.inputs : (baseRows || [])
+  // Rows to seed the distribution editor with
+  const initialRows = distBlock?.inputs || baseRows || []
 
   const d = scenario.createdAt ? new Date(scenario.createdAt) : null
   const dateStr = d && !isNaN(d) ? d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : null
@@ -238,22 +225,19 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
             <button
               onClick={() => {
-                const distBlock = pendingDistId !== '__base__'
-                  ? (blocks.distribution || []).find(b => b.id === pendingDistId) : null
-                const pricingBlock = pendingPricingId !== '__base__'
-                  ? (blocks.pricing || []).find(b => b.id === pendingPricingId) : null
-                const promoBlock = pendingPromoId !== '__base__'
-                  ? (blocks.promotion || []).find(b => b.id === pendingPromoId) : null
+                const wb_dist    = findBlock('distribution', pendingDistId)
+                const wb_pricing = findBlock('pricing',      pendingPricingId)
+                const wb_promo   = findBlock('promotion',    pendingPromoId)
                 onWriteToExcel?.(scenario, {
                   fiscal_calendar: fiscalCalendar,
-                  distribution: (distBlock ? distBlock.inputs : (baseRows || [])).map(r => ({
+                  distribution: (wb_dist?.inputs || baseRows || []).map(r => ({
                     SKU_name: r.SKU_name,
                     unit_velocity: r.unit_velocity,
                     dist_prob: r.dist_prob,
                     months: r.months,
                   })),
-                  pricing: pricingBlock?.inputs ?? basePricingSnapshot ?? {},
-                  promo: (promoBlock?.inputs ?? basePromoSnapshot ?? basePromoState ?? {}).grid ?? {},
+                  pricing: wb_pricing?.inputs ?? {},
+                  promo: wb_promo?.inputs?.grid ?? {},
                 }, { onStart: () => setWriting(true), onEnd: () => setWriting(false) })
               }}
               disabled={writing}
@@ -365,8 +349,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         <DistributionEditor
           key={scenario.id + '-dist'}
           initialRows={initialRows}
-          initialActiveBlock={distBlock}
-          blocks={blocks.distribution || []}
+          initialActiveBlock={distBlock?.id === '__base__' ? null : distBlock}
+          blocks={(blocks.distribution || []).filter(b => b.id !== '__base__')}
           baseRows={baseRows}
           showBasePlan={true}
           onSaveNew={handleCreateDistBlock}
@@ -380,9 +364,9 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           key={scenario.id + '-pricing'}
           devData={devData}
           fiscalCalendar={fiscalCalendar}
-          blocks={blocks.pricing || []}
-          initialActiveBlock={pricingBlock}
-          basePricingSnapshot={basePricingSnapshot}
+          blocks={(blocks.pricing || []).filter(b => b.id !== '__base__')}
+          initialActiveBlock={pricingBlock?.id === '__base__' ? null : pricingBlock}
+          basePricingSnapshot={findBlock('pricing', '__base__')?.inputs}
           onSaveNew={handleCreatePricingBlock}
           onOverwrite={handleOverwritePricing}
           onBlockChange={setPendingPricingId}
@@ -391,12 +375,12 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
       {subTab === 'promotion' && (
         <PromotionEditor
           key={scenario.id + '-promo'}
-          initialGrid={promoBlock?.inputs?.grid || basePromoSnapshot?.grid || basePromoState?.grid || {}}
-          initialPromos={promoBlock?.inputs?.promos || basePromoSnapshot?.promos || basePromoState?.promos || []}
-          initialActiveBlock={promoBlock}
-          blocks={blocks.promotion || []}
-          baseGrid={basePromoSnapshot?.grid || basePromoState?.grid || {}}
-          basePromos={basePromoSnapshot?.promos || basePromoState?.promos || []}
+          initialGrid={promoBlock?.inputs?.grid || {}}
+          initialPromos={promoBlock?.inputs?.promos || []}
+          initialActiveBlock={promoBlock?.id === '__base__' ? null : promoBlock}
+          blocks={(blocks.promotion || []).filter(b => b.id !== '__base__')}
+          baseGrid={findBlock('promotion', '__base__')?.inputs?.grid || {}}
+          basePromos={findBlock('promotion', '__base__')?.inputs?.promos || []}
           rows={baseRows}
           fiscalCalendar={fiscalCalendar}
           onSaveNew={handleCreatePromoBlock}
@@ -460,8 +444,6 @@ export default function ScenariosView({
   baseRows,
   fiscalCalendar = {},
   basePromoState,
-  basePricingSnapshot,
-  basePromoSnapshot,
   onWriteToExcel,
   onNewScenario,
   onDeleteScenario,
@@ -549,8 +531,6 @@ export default function ScenariosView({
         baseRows={baseRows}
         fiscalCalendar={fiscalCalendar}
         basePromoState={basePromoState}
-        basePricingSnapshot={basePricingSnapshot}
-        basePromoSnapshot={basePromoSnapshot}
         onWriteToExcel={onWriteToExcel}
         onDelete={handleDelete}
         onSaveNew={onCreateDistributionBlock}

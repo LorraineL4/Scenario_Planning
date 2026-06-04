@@ -215,13 +215,94 @@ export default function App() {
   const [blockRevision, setBlockRevision] = useState(0);
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [baseScenarioOverrides, setBaseScenarioOverrides] = useState({});
-  const [baseRows, setBaseRows]               = useState(null);
-  const [basePricingSnapshot, setBasePricingSnapshot] = useState(null);
-  const [basePromoSnapshot,   setBasePromoSnapshot]   = useState(null);
+  const [baseRows, setBaseRows]     = useState(null);
   const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
   const [activeIsBase, setActiveIsBase] = useState(false);
   const [saveModalOpen, setSaveModalOpen] = useState(false);
+
+  // ── Base block factory ────────────────────────────────────────────────────
+  // Called after every file/devData load to populate the __base__ blocks.
+  // These are the canonical starting points for all three block types.
+
+  const buildBaseBlocks = useCallback((devData, distRows) => {
+    const now = new Date().toISOString();
+    const skus = devData?.skus || {};
+
+    // Distribution
+    const distBlock = {
+      id: '__base__', name: 'Base Distribution',
+      note: `${distRows.length} SKUs · base`, created_at: now,
+      inputs: distRows.map(r => ({ ...r, months: { ...r.months } })),
+    };
+
+    // Pricing — mirrors PricingView's initFromDevData
+    const cal = devData?.fiscal_calendar || {};
+    const periods = Object.keys(cal);
+    const pricingData = {};
+    for (const [skuName, skuData] of Object.entries(skus)) {
+      const upcharge       = skuData.static_inputs?.upcharge_dist_pct ?? 0;
+      const pricingPeriods = skuData.pricing_periods || {};
+      const skuPeriods = {};
+      for (const p of periods) {
+        const src = pricingPeriods[p] || {};
+        skuPeriods[p] = {
+          base_price:          src.base_price          ?? null,
+          gross_price:         src.gross_price         ?? null,
+          edlp_direct:         src.edlp_direct         ?? null,
+          price_impact_manual: src.price_impact_manual ?? null,
+          upcharge_dist_pct:   src.upcharge_dist_pct   ?? upcharge,
+          edlp_mcb_pct:        src.edlp_mcb_pct        ?? 0,
+        };
+      }
+      pricingData[skuName] = { periods: skuPeriods };
+    }
+    const pricingBlock = {
+      id: '__base__', name: 'Base Pricing',
+      note: `${Object.keys(pricingData).length} SKUs · base`, created_at: now,
+      inputs: pricingData,
+    };
+
+    // Promotion (both slots) — mirrors planPromos logic
+    const skuToGroup = {};
+    for (const r of distRows) skuToGroup[r.SKU_name] = r.Product_Group;
+    const nameToColor = new Map();
+    const grid = {};
+    const addSlot = (pg, period, slot, pdata) => {
+      const s = String(slot);
+      const name = pdata[`name_promo${s}`]; const weeks = pdata[`weeks_event_promo${s}`];
+      if (!name || !weeks) return;
+      const key = `${pg}|||${period}|||${s}`;
+      if (grid[key]) return;
+      if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
+      const lift = pdata[`lift_promo${s}`];
+      grid[key] = {
+        id: `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}-${s}`,
+        colorIdx: nameToColor.get(name), name,
+        promo_price:   Math.round((pdata[`price_promo${s}`]  || 0) * 100) / 100,
+        weeks,
+        scan:          Math.round((pdata[`scan_promo${s}`]   || 0) * 100) / 100,
+        fixed_fee:     Math.round((pdata[`fixed_promo${s}`]  || 0) * 100) / 100,
+        expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
+      };
+    };
+    for (const [skuName, skuData] of Object.entries(skus)) {
+      const pg = skuToGroup[skuName]; if (!pg) continue;
+      for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
+        addSlot(pg, period, 1, pdata); addSlot(pg, period, 2, pdata);
+      }
+    }
+    const promos = Array.from(nameToColor.entries()).map(([name, colorIdx]) => ({
+      id: `plan-${name.replace(/\s+/g, '-').toLowerCase()}`, colorIdx, name,
+    }));
+    const promoBlock = {
+      id: '__base__', name: 'Base Promotion',
+      note: `${Object.keys(grid).length} cells · base`, created_at: now,
+      inputs: { grid, promos },
+    };
+
+    return { distBlock, pricingBlock, promoBlock };
+  }, []);
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
@@ -241,11 +322,10 @@ export default function App() {
       setDevData(data);
       const acctKey = data.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
       if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
-      setBlocks({ distribution: [], pricing: [], promotion: [] });
+      const { distBlock, pricingBlock, promoBlock } = buildBaseBlocks(data, initialRows);
+      setBlocks({ distribution: [distBlock], pricing: [pricingBlock], promotion: [promoBlock] });
       setSavedScenarios([]);
       setBaseScenarioOverrides({});
-      setBasePricingSnapshot(null);
-      setBasePromoSnapshot(null);
       setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
@@ -279,14 +359,18 @@ export default function App() {
       }
 
       if (engineResult.status === 'fulfilled') {
-        setDevData(engineResult.value);
-        const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
+        const engineData = engineResult.value;
+        setDevData(engineData);
+        const acctKey = engineData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
         if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
-        setBlocks({ distribution: [], pricing: [], promotion: [] });
+        // tableRows is in scope from parsedResult above
+        const rows4blocks = parsedResult.status === 'fulfilled'
+          ? parsedResult.value.rows.map(r => ({ ...r, months: { ...r.months } }))
+          : [];
+        const { distBlock, pricingBlock, promoBlock } = buildBaseBlocks(engineData, rows4blocks);
+        setBlocks({ distribution: [distBlock], pricing: [pricingBlock], promotion: [promoBlock] });
         setSavedScenarios([]);
         setBaseScenarioOverrides({});
-        setBasePricingSnapshot(null);
-        setBasePromoSnapshot(null);
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -388,50 +472,12 @@ export default function App() {
   const activeBlock = activeIsBase ? { id: '__base__', name: 'Base Distribution' } : activePlanBlock;
   const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_') ?? null;
 
+  // Base promo data comes from the __base__ promotion block (created on file load).
+  // This replaces the old planPromos memo — no duplication.
   const planPromos = useMemo(() => {
-    if (!devData) return { grid: {}, promos: [] };
-    // Build SKU→ProductGroup mapping from baseRows
-    const skuToGroup = {};
-    for (const r of baseRows || []) skuToGroup[r.SKU_name] = r.Product_Group;
-    const nameToColor = new Map();
-    const grid = {};
-
-    const addSlot = (pg, period, slot, pdata) => {
-      const suffix = slot === 1 ? '1' : '2';
-      const name  = pdata[`name_promo${suffix}`];
-      const weeks = pdata[`weeks_event_promo${suffix}`];
-      if (!name || !weeks) return;
-      const key = `${pg}|||${period}|||${slot}`;
-      if (grid[key]) return; // first SKU in group wins
-      if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
-      const lift = pdata[`lift_promo${suffix}`];
-      grid[key] = {
-        id:            `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}-${slot}`,
-        colorIdx:      nameToColor.get(name),
-        name,
-        promo_price:   Math.round((pdata[`price_promo${suffix}`]  || 0) * 100) / 100,
-        weeks,
-        scan:          Math.round((pdata[`scan_promo${suffix}`]   || 0) * 100) / 100,
-        fixed_fee:     Math.round((pdata[`fixed_promo${suffix}`]  || 0) * 100) / 100,
-        expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
-      };
-    };
-
-    for (const [skuName, skuData] of Object.entries(devData.skus || {})) {
-      const pg = skuToGroup[skuName];
-      if (!pg) continue;
-      for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
-        addSlot(pg, period, 1, pdata);
-        addSlot(pg, period, 2, pdata);
-      }
-    }
-    const promos = Array.from(nameToColor.entries()).map(([name, colorIdx]) => ({
-      id: `plan-${name.replace(/\s+/g, '-').toLowerCase()}`,
-      colorIdx,
-      name,
-    }));
-    return { grid, promos };
-  }, [devData, baseRows]);
+    const base = (blocks.promotion || []).find(b => b.id === '__base__');
+    return base?.inputs || { grid: {}, promos: [] };
+  }, [blocks.promotion]);
 
   // ── Building block actions ────────────────────────────────────────────────
 
@@ -509,15 +555,15 @@ export default function App() {
 
   const handleExport = useCallback(() => {
     const acctName = devData?.account?.account_name || 'account';
+    // blocks now includes __base__ entries — no need for separate baseRows
     const payload = {
-      _version: '1.0',
+      _version: '2.0',
       _meta: {
         account: acctName,
         created_at: new Date().toISOString(),
         source_file: devData?._meta?.source_file || null,
       },
       devData,
-      baseRows,
       blocks,
       savedScenarios,
     };
@@ -528,7 +574,7 @@ export default function App() {
     a.download = `${acctName.replace(/\s+/g, '_')}_scenarios.json`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [blocks, baseRows, savedScenarios, devData]);
+  }, [blocks, savedScenarios, devData]);
 
   const handleImportFile = useCallback((e) => {
     const file = e.target.files[0];
@@ -537,11 +583,18 @@ export default function App() {
     reader.onload = (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
-        if (data.devData)        { setDevData(data.devData); }
-        if (data.baseRows)       { setBaseRows(data.baseRows); setRows(data.baseRows); }
-        if (data.blocks)         { setBlocks(data.blocks); }
-        if (data.savedScenarios) { setSavedScenarios(data.savedScenarios); }
-        if (data.devData || data.baseRows) setView('compare');
+        if (data.devData) setDevData(data.devData);
+        if (data.blocks) {
+          setBlocks(data.blocks);
+          // Sync baseRows from the __base__ distribution block
+          const baseDistBlock = (data.blocks.distribution || []).find(b => b.id === '__base__');
+          if (baseDistBlock?.inputs) { setBaseRows(baseDistBlock.inputs); setRows(baseDistBlock.inputs); }
+        } else if (data.baseRows) {
+          // Backward compat: v1 exports had separate baseRows
+          setBaseRows(data.baseRows); setRows(data.baseRows);
+        }
+        if (data.savedScenarios) setSavedScenarios(data.savedScenarios);
+        if (data.devData || data.blocks) setView('compare');
       } catch {}
       e.target.value = '';
     };
@@ -623,17 +676,14 @@ export default function App() {
   }, []);
 
   const updateBlockInputs = useCallback((type, blockId, inputs) => {
-    if (!blockId || blockId === '__base__') {
-      if (type === 'distribution') setBaseRows(inputs);
-      else if (type === 'pricing')  setBasePricingSnapshot(inputs);
-      else if (type === 'promotion') setBasePromoSnapshot(inputs);
-    } else {
-      setBlocks(b => ({
-        ...b,
-        [type]: b[type].map(bl => bl.id === blockId ? { ...bl, inputs } : bl),
-      }));
-      setBlockRevision(r => r + 1);
-    }
+    const id = blockId || '__base__';
+    setBlocks(b => ({
+      ...b,
+      [type]: b[type].map(bl => bl.id === id ? { ...bl, inputs } : bl),
+    }));
+    if (id !== '__base__') setBlockRevision(r => r + 1);
+    // Keep baseRows in sync for the main distribution table
+    if (type === 'distribution' && id === '__base__') setBaseRows(inputs);
   }, []);
 
   const createDistributionBlock = useCallback((id, name, rows) => {
@@ -884,8 +934,6 @@ export default function App() {
             baseRows={baseRows}
             fiscalCalendar={fiscalCalendar}
             basePromoState={planPromos}
-            basePricingSnapshot={basePricingSnapshot}
-            basePromoSnapshot={basePromoSnapshot}
             onNewScenario={() => setView('new-scenario')}
             onDeleteScenario={deleteScenario}
             onUpdateScenario={updateScenario}
