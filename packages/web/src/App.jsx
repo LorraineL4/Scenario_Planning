@@ -513,7 +513,15 @@ export default function App() {
 
   const handleOverwrite = useCallback(() => {
     if (activeIsBase) {
-      setBaseRows(rows.map(r => ({ ...r, months: { ...r.months } })));
+      const snapshot = rows.map(r => ({ ...r, months: { ...r.months } }));
+      setBaseRows(snapshot);
+      // Keep __base__ distribution block in sync
+      setBlocks(b => ({
+        ...b,
+        distribution: b.distribution.map(bl =>
+          bl.id === '__base__' ? { ...bl, inputs: snapshot } : bl
+        ),
+      }));
       setSaveModalOpen(false);
       return;
     }
