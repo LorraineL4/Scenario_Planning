@@ -1,12 +1,49 @@
+import { useState } from 'react'
 import { tagColor, tagSoft, Dot, Icon } from './ui.jsx'
 
 const fmt$ = (v) => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
 const fmtPct = (v) => v == null ? '—' : `${(Number(v) * 100).toFixed(1)}%`
 
+function BlockCard({ block, onDelete }) {
+  const [confirming, setConfirming] = useState(false)
+  const d = new Date(block.created_at)
+  const dateStr = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return (
+    <div style={{
+      background: 'var(--panel)', border: '1px solid var(--line)',
+      borderRadius: 'var(--radius)', padding: '14px 16px',
+      display: 'flex', flexDirection: 'column', gap: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, color: 'var(--ink)', lineHeight: 1.3 }}>{block.name}</div>
+        {confirming ? (
+          <div style={{ display: 'flex', gap: 4, flex: 'none' }}>
+            <button onClick={() => onDelete(block.id)} style={{
+              fontSize: 11.5, fontWeight: 700, padding: '3px 8px', borderRadius: 5, border: 'none',
+              background: '#dc2626', color: '#fff', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Delete</button>
+            <button onClick={() => setConfirming(false)} style={{
+              fontSize: 11.5, fontWeight: 600, padding: '3px 8px', borderRadius: 5,
+              border: '1px solid var(--line)', background: 'var(--panel)', cursor: 'pointer', fontFamily: 'inherit',
+            }}>Cancel</button>
+          </div>
+        ) : (
+          <button onClick={() => setConfirming(true)} style={{
+            background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)',
+            padding: 2, display: 'flex', alignItems: 'center', flex: 'none',
+          }} title="Delete block">
+            <Icon name="trash" size={14} />
+          </button>
+        )}
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--muted)' }}>{block.note} · {dateStr}</div>
+    </div>
+  )
+}
+
 function ScenarioCard({ scenario: s }) {
   const per = s.per || []
   const maxM = Math.max(...per.map(p => p.grossSales), 1)
-
   return (
     <div style={{
       background: 'var(--panel)', border: '1px solid var(--line)',
@@ -14,8 +51,6 @@ function ScenarioCard({ scenario: s }) {
     }}>
       <div style={{ height: 4, background: tagColor(s.tag) }} />
       <div style={{ padding: 18, display: 'flex', flexDirection: 'column', gap: 14, flex: 1 }}>
-
-        {/* Name + note */}
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
             <Dot tag={s.tag} />
@@ -29,8 +64,6 @@ function ScenarioCard({ scenario: s }) {
           </div>
           <p style={{ margin: 0, fontSize: 12.5, color: 'var(--muted)', lineHeight: 1.45 }}>{s.note}</p>
         </div>
-
-        {/* Sparkline */}
         {per.length > 0 && (
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 44 }}>
             {per.map((p, i) => (
@@ -43,8 +76,6 @@ function ScenarioCard({ scenario: s }) {
             ))}
           </div>
         )}
-
-        {/* KPI strip */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
           {[
             ['Gross',  fmt$(s.grossSales)],
@@ -66,22 +97,67 @@ function ScenarioCard({ scenario: s }) {
   )
 }
 
-export default function ScenarioListView({ scenarios = [] }) {
+const colHeader = (label) => (
+  <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink-2)', marginBottom: 10, letterSpacing: '.02em' }}>{label}</div>
+)
+const devPlaceholder = (label) => (
+  <div style={{
+    border: '1.5px dashed var(--muted-2)', borderRadius: 'var(--radius)',
+    padding: '18px 16px', textAlign: 'center', color: 'var(--muted)', fontSize: 12.5,
+  }}>
+    {label} — in development
+  </div>
+)
+
+export default function ScenarioListView({ scenarios = [], blocks = { distribution: [], pricing: [], promotion: [] }, onDeleteBlock }) {
   return (
     <div className="fade-in" style={{ padding: 'var(--gut)', maxWidth: 1320, margin: '0 auto' }}>
+
+      {/* Building blocks */}
+      <div style={{ marginBottom: 36 }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 17, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--ink)' }}>
+          Building blocks
+        </h2>
+        <p style={{ margin: '0 0 16px', color: 'var(--muted)', fontSize: 13 }}>
+          Named snapshots you can mix into any scenario
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 'var(--gut)' }}>
+          <div>
+            {colHeader('Distribution')}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {blocks.distribution.length === 0 ? (
+                <div style={{ color: 'var(--muted)', fontSize: 12.5, fontStyle: 'italic', paddingLeft: 2 }}>
+                  No blocks saved — use "Save as block…" in the Distribution tab to snapshot the current plan
+                </div>
+              ) : (
+                blocks.distribution.map(bl => (
+                  <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('distribution', id)} />
+                ))
+              )}
+            </div>
+          </div>
+          <div>
+            {colHeader('Pricing')}
+            {devPlaceholder('Pricing editor')}
+          </div>
+          <div>
+            {colHeader('Promotion')}
+            {devPlaceholder('Promotion editor')}
+          </div>
+        </div>
+      </div>
+
+      {/* Scenario cards */}
       <div style={{ marginBottom: 20 }}>
-        <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--ink)' }}>
+        <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800, letterSpacing: '-.01em', color: 'var(--ink)' }}>
           Saved scenarios
-        </h1>
+        </h2>
         <p style={{ margin: '5px 0 0', color: 'var(--muted)', fontSize: 13 }}>
           {scenarios.length} plan{scenarios.length !== 1 ? 's' : ''} saved
         </p>
       </div>
-
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 'var(--gut)' }}>
         {scenarios.map(s => <ScenarioCard key={s.id} scenario={s} />)}
-
-        {/* New scenario placeholder */}
         <div style={{
           border: '1.5px dashed var(--muted-2)', borderRadius: 'var(--radius)',
           background: 'var(--panel-2)', color: 'var(--muted)',
