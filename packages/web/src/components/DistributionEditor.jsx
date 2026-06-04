@@ -10,9 +10,9 @@ const fmt = {
 
 // ─── Save modal ───────────────────────────────────────────────────────────────
 
-export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose, defaultName = '' }) {
+export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose }) {
   const [step, setStep] = useState(activeBlock ? 'choice' : 'name')
-  const [name, setName] = useState(defaultName)
+  const [name, setName] = useState('')
   const inputRef = useRef(null)
   const typeLabel = blockType.charAt(0).toUpperCase() + blockType.slice(1)
 
@@ -379,7 +379,6 @@ export default function DistributionEditor({
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
           onClose={() => setSaveModalOpen(false)}
-          defaultName={activeBlock ? '' : `Block ${blocks.length + 1}`}
         />
       )}
     </>
