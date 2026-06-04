@@ -232,24 +232,27 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
                             _DIST_COL_PROB_P01 + offset, prob_decimal)
 
     # ── 2. PG sheets — pricing fields ─────────────────────────────────────────
+    # Pricing block shape: { skuName: { periods: { P01: { field: val } } } }
     pricing: dict = scenario_inputs.get("pricing") or {}
-    for sku_name, period_data in pricing.items():
+    for sku_name, sku_pricing in pricing.items():
         actual_sheet = sheet_index.get(sku_name.lower())
         if actual_sheet is None:
             continue
         ws_pg = wb[actual_sheet]
+        # Unwrap the "periods" key that PricingView uses internally
+        period_data = sku_pricing.get("periods") or sku_pricing  # handle both shapes
         for period, fields in period_data.items():
             col = period_to_pg_col.get(period)
             if col is None:
                 continue
             for field_key, row in _PG_ROWS.items():
-                # Only write pricing rows (rows < 35 are everyday pricing)
+                # Only write everyday-pricing rows (stop before promo rows at 35)
                 if row >= 35:
                     break
                 val = fields.get(field_key)
                 _safe_write(ws_pg, row, col, val)
 
-    # ── 3. PG sheets — promo slot 1 ───────────────────────────────────────────
+    # ── 3. PG sheets — promo ─────────────────────────────────────────────────
     promo: dict = scenario_inputs.get("promo") or {}
     for cell_key, promo_data in promo.items():
         parts = cell_key.split("|||")
@@ -277,6 +280,7 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
                 val = 1.0 + float(val) / 100.0
             _safe_write(ws_pg, excel_row, col, val)
 
+    print(f"[write_dap] dist_rows={len(distribution_rows)} pricing_skus={len(pricing)} promo_cells={len(promo)}")
     # ── 4. Finalise and return bytes ──────────────────────────────────────────
     wb.calculation.fullCalcOnLoad = True
     t1 = time.time()
