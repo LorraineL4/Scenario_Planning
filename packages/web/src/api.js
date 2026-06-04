@@ -9,3 +9,13 @@ export async function uploadWorkbook(file) {
   }
   return res.json()
 }
+
+export async function loadDevData() {
+  const res = await fetch('/api/dev-data')
+  if (!res.ok) {
+    let detail = res.statusText
+    try { detail = (await res.json()).detail ?? detail } catch (_) {}
+    throw new Error(detail)
+  }
+  return res.json()
+}

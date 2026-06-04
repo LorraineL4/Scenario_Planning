@@ -1,11 +1,14 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pathlib import Path
+import json
 import sys
 import tempfile
 import shutil
 
-ENGINE_DIR = Path(__file__).resolve().parent.parent / "engine"
+REPO_ROOT  = Path(__file__).resolve().parent.parent.parent
+ENGINE_DIR = REPO_ROOT / "packages" / "engine"
 sys.path.insert(0, str(ENGINE_DIR))
 
 from extract_config import extract as extract_config
@@ -24,6 +27,14 @@ app.add_middleware(
 @app.get("/api/health")
 async def health():
     return {"status": "ok"}
+
+
+@app.get("/api/dev-data")
+async def dev_data():
+    path = REPO_ROOT / "data" / "processed" / "dev_data.json"
+    if not path.exists():
+        raise HTTPException(404, "dev_data.json not found — run: python packages/api/gen_dev_data.py <DAP.xlsx>")
+    return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
 
 
 @app.post("/api/extract")

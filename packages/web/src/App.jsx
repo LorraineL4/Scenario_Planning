@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { uploadWorkbook } from './api.js'
+import { uploadWorkbook, loadDevData } from './api.js'
 import DistributionTab from './components/DistributionTab.jsx'
 
 const TABS = [
@@ -28,6 +28,21 @@ export default function App() {
       dataKey.current += 1
       setDapData(data)
       setMeta({ file: file.name, skuCount: Object.keys(data.skus || {}).length })
+    } catch (e) {
+      setError(e.message || String(e))
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const handleDevData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const data = await loadDevData()
+      dataKey.current += 1
+      setDapData(data)
+      setMeta({ file: 'dev_data.json', skuCount: Object.keys(data.skus || {}).length })
     } catch (e) {
       setError(e.message || String(e))
     } finally {
@@ -77,6 +92,11 @@ export default function App() {
               Choose .xlsx file
               <input type="file" accept=".xlsx" hidden onChange={(e) => handleFile(e.target.files[0])} />
             </label>
+            {import.meta.env.DEV && (
+              <button className="btn" onClick={handleDevData}>
+                Load dev data
+              </button>
+            )}
           </div>
         </div>
         <div className="drop-hint">Drop .xlsx to load · API must be running on port 8000</div>
