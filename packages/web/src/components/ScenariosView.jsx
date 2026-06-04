@@ -32,7 +32,7 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, basePricingSnapshot, basePromoSnapshot, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months }) {
+function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, basePricingSnapshot, basePromoSnapshot, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months, onWriteToExcel }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
@@ -233,7 +233,34 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>Created {dateStr}</span>
             )}
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
+            <button
+              onClick={() => {
+                const distBlock = pendingDistId !== '__base__'
+                  ? (blocks.distribution || []).find(b => b.id === pendingDistId) : null
+                const pricingBlock = pendingPricingId !== '__base__'
+                  ? (blocks.pricing || []).find(b => b.id === pendingPricingId) : null
+                const promoBlock = pendingPromoId !== '__base__'
+                  ? (blocks.promotion || []).find(b => b.id === pendingPromoId) : null
+                onWriteToExcel?.(scenario, {
+                  fiscal_calendar: fiscalCalendar,
+                  distribution: (distBlock ? distBlock.inputs : (baseRows || [])).map(r => ({
+                    SKU_name: r.SKU_name,
+                    unit_velocity: r.unit_velocity,
+                    dist_prob: r.dist_prob,
+                    months: r.months,
+                  })),
+                  pricing: pricingBlock?.inputs ?? basePricingSnapshot ?? {},
+                  promo: (promoBlock?.inputs ?? basePromoSnapshot ?? basePromoState ?? {}).grid ?? {},
+                })
+              }}
+              style={{
+                fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 7,
+                border: '1px solid var(--line-strong)', background: 'var(--panel)',
+                color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit',
+              }}
+              title="Write this scenario's inputs back to a DAP workbook"
+            >Write to Excel</button>
             {confirming ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => onDelete(scenario.id)} style={{
@@ -430,6 +457,7 @@ export default function ScenariosView({
   basePromoState,
   basePricingSnapshot,
   basePromoSnapshot,
+  onWriteToExcel,
   onNewScenario,
   onDeleteScenario,
   onUpdateScenario,
@@ -518,6 +546,7 @@ export default function ScenariosView({
         basePromoState={basePromoState}
         basePricingSnapshot={basePricingSnapshot}
         basePromoSnapshot={basePromoSnapshot}
+        onWriteToExcel={onWriteToExcel}
         onDelete={handleDelete}
         onSaveNew={onCreateDistributionBlock}
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}

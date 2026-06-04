@@ -1,10 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from pathlib import Path
 from typing import Dict, List, Optional
+import io
 import json
+import re
 import sys
 import tempfile
 import shutil
@@ -16,6 +18,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 from extract_config import extract as extract_config
 from extract_inputs import extract as extract_inputs
 from run_account import run_account
+from write_dap import write_dap
 
 app = FastAPI(title="Scenario Planning API", version="0.1.0")
 
@@ -311,3 +314,39 @@ def _merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
             "current_inputs":     current_inputs,
         }
     return result
+
+
+@app.post("/api/writeback")
+async def writeback_scenario(
+    file: UploadFile = File(...),
+    scenario_inputs: str = Form(...),
+):
+    """
+    Accept a DAP .xlsx and a JSON scenario_inputs payload, write the scenario's
+    distribution/pricing/promo values into the workbook, and stream the modified
+    file back as a download.  Nothing is written to disk.
+    """
+    if not (file.filename or "").endswith(".xlsx"):
+        raise HTTPException(400, "Only .xlsx files are supported.")
+
+    try:
+        inputs = json.loads(scenario_inputs)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"Invalid scenario_inputs JSON: {exc}")
+
+    source_bytes = await file.read()
+
+    try:
+        result_bytes = write_dap(source_bytes, inputs)
+    except Exception as exc:
+        raise HTTPException(422, str(exc))
+
+    stem = Path(file.filename or "workbook").stem
+    safe = re.sub(r'[\\/:*?"<>|]', "-", (inputs.get("scenario_name") or "scenario")).strip()
+    out_name = f"{stem}-{safe}.xlsx"
+
+    return StreamingResponse(
+        io.BytesIO(result_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{out_name}"'},
+    )
