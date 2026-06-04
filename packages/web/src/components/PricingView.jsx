@@ -316,8 +316,12 @@ export default function PricingView({
   }
 
   const handleOverwrite = () => {
-    if (!activeBlock) return
-    onOverwrite?.(activeBlock.id, snapshot())
+    if (activeBlock) {
+      onOverwrite?.(activeBlock.id, snapshot())
+    } else {
+      onOverwrite?.('__base__', snapshot())
+      onBlockChange?.('__base__')
+    }
     setSaveModalOpen(false)
   }
 
@@ -554,7 +558,7 @@ export default function PricingView({
 
       {saveModalOpen && (
         <SaveModal
-          activeBlock={activeBlock}
+          activeBlock={activeBlock || { id: '__base__', name: 'Base Pricing' }}
           blockType="pricing"
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}

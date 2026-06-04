@@ -194,8 +194,13 @@ export default function PromotionEditor({
   }
 
   const handleOverwrite = () => {
-    if (!activeBlock) return
-    onOverwrite?.(activeBlock.id, { promos, grid }); setSaveModalOpen(false)
+    if (activeBlock) {
+      onOverwrite?.(activeBlock.id, { promos, grid })
+    } else {
+      onOverwrite?.('__base__', { promos, grid })
+      onBlockChange?.('__base__')
+    }
+    setSaveModalOpen(false)
   }
 
   // ── Cell interaction ──────────────────────────────────────────────────────
@@ -368,7 +373,7 @@ export default function PromotionEditor({
 
       {saveModalOpen && (
         <SaveModal
-          activeBlock={activeBlock}
+          activeBlock={activeBlock || { id: '__base__', name: 'Base Promotion' }}
           blockType="promotion"
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}

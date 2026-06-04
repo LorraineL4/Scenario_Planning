@@ -152,7 +152,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   }
   const handleOverwritePromo = (blockId, data) => {
     onSavePromotion?.(blockId, data)
-    autoSave({ promotionId: blockId })
+    if (blockId !== '__base__') autoSave({ promotionId: blockId })
     setBlockRevision(r => r + 1)
   }
   const handleCreatePricingBlock = (id, name, data) => {
@@ -161,7 +161,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   }
   const handleOverwritePricing = (blockId, data) => {
     onSavePricing?.(blockId, data)
-    autoSave({ pricingId: blockId })
+    if (blockId !== '__base__') autoSave({ pricingId: blockId })
     setBlockRevision(r => r + 1)
   }
 
@@ -307,11 +307,23 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         ))}
       </div>
 
-      {/* Missing block warning — only when the pending block ID can't be found */}
+      {/* Missing block warnings — only when the pending block ID can't be found */}
       {pendingDistId && pendingDistId !== '__base__' &&
        !(blocks.distribution || []).find(b => b.id === pendingDistId) && (
         <div style={{ margin: '8px 20px 0', padding: '8px 12px', borderRadius: 7, background: '#fef3e2', color: '#9a5900', fontSize: 12.5, fontWeight: 500 }}>
           ⚠ Distribution block no longer exists — showing base data.
+        </div>
+      )}
+      {pendingPricingId && pendingPricingId !== '__base__' &&
+       !(blocks.pricing || []).find(b => b.id === pendingPricingId) && (
+        <div style={{ margin: '8px 20px 0', padding: '8px 12px', borderRadius: 7, background: '#fef3e2', color: '#9a5900', fontSize: 12.5, fontWeight: 500 }}>
+          ⚠ Pricing block no longer exists — showing base data.
+        </div>
+      )}
+      {pendingPromoId && pendingPromoId !== '__base__' &&
+       !(blocks.promotion || []).find(b => b.id === pendingPromoId) && (
+        <div style={{ margin: '8px 20px 0', padding: '8px 12px', borderRadius: 7, background: '#fef3e2', color: '#9a5900', fontSize: 12.5, fontWeight: 500 }}>
+          ⚠ Promotion block no longer exists — showing base data.
         </div>
       )}
 
