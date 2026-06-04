@@ -2,8 +2,7 @@
 """
 gen_dev_data.py — Pre-extract a DAP workbook to JSON for fast UI development.
 
-Usage:
-    cd "260528 - Scenario Planning"
+Usage (run from repo root):
     python packages/api/gen_dev_data.py "data/raw/260413 - WFM_CORP - DAP.xlsx"
 
 Output: data/processed/dev_data.json  (gitignored)
@@ -23,11 +22,21 @@ from extract_inputs import extract as extract_inputs
 from run_account import run_account
 
 
+_PROMO_PERIOD_FIELDS = (
+    "name_promo1", "price_promo1", "weeks_event_promo1",
+    "scan_promo1", "fixed_promo1", "lift_promo1",
+)
+
+
 def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
     result = {}
     for name in sorted(set(config_skus) | set(inputs_skus)):
         c = config_skus.get(name, {})
         inp = inputs_skus.get(name, {})
+        promo_periods = {
+            period: {f: pdata.get(f) for f in _PROMO_PERIOD_FIELDS}
+            for period, pdata in inp.get("periods", {}).items()
+        }
         result[name] = {
             "velocity":           inp.get("velocity"),
             "current_acv":        inp.get("current_acv"),
@@ -37,6 +46,7 @@ def merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
             "slotting_per_store": inp.get("slotting_per_store"),
             "seasonality":        c.get("seasonality", {}),
             "static_inputs":      c.get("static_inputs", {}),
+            "promo_periods":      promo_periods,
         }
     return result
 
