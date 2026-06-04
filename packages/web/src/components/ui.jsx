@@ -29,6 +29,9 @@ export function Icon({ name, size = 18, stroke = 1.8, style }) {
     x:        <g><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></g>,
     trash:    <g><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></g>,
     pencil:   <g><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></g>,
+    arrowLeft:<g><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></g>,
+    check:    <g><polyline points="20 6 9 17 4 12"/></g>,
+    layers:   <g><rect x="2" y="15" width="20" height="4" rx="1.5"/><rect x="2" y="9" width="20" height="4" rx="1.5"/><rect x="2" y="3" width="20" height="4" rx="1.5"/></g>,
   }
   return <svg {...p}>{paths[name] || null}</svg>
 }

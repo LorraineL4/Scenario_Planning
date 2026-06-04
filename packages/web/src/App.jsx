@@ -2,6 +2,8 @@ import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react'
 import { parseDAP } from './dap-xlsx.js';
 import CompareView from './components/CompareView.jsx';
 import ScenarioListView from './components/ScenarioListView.jsx';
+import ScenariosView from './components/ScenariosView.jsx';
+import ScenarioComposerView from './components/ScenarioComposerView.jsx';
 import { Icon } from './components/ui.jsx';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
@@ -431,7 +433,8 @@ function TopBar({ view, setView, account, onExport, onImportClick }) {
         {tab('pricing',      'sliders', 'Pricing')}
         {tab('promotion',    'star',    'Promotion')}
         {tab('compare',      'compare', 'Compare')}
-        {tab('scenarios',    'grid',    'Scenarios')}
+        {tab('blocks',       'grid',    'Building Blocks')}
+        {tab('scenarios',    'layers',  'Scenarios')}
       </nav>
 
       {/* Right side */}
@@ -500,6 +503,7 @@ export default function App() {
   const [devData, setDevData] = useState(null);
   const [view, setView]       = useState('compare');
   const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
+  const [savedScenarios, setSavedScenarios] = useState([]);
   const [baseRows, setBaseRows]     = useState(null);
   const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
@@ -523,7 +527,7 @@ export default function App() {
       setShowBasePlan(true);
       setDevData(data);
       const acctKey = data.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-      if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); } catch {} }
+      if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); if (saved?.savedScenarios) setSavedScenarios(saved.savedScenarios); } catch {} }
       setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
@@ -559,7 +563,7 @@ export default function App() {
       if (engineResult.status === 'fulfilled') {
         setDevData(engineResult.value);
         const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-        if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); } catch {} }
+        if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); if (saved?.savedScenarios) setSavedScenarios(saved.savedScenarios); } catch {} }
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -760,11 +764,28 @@ export default function App() {
     reader.readAsText(file);
   }, []);
 
+  const handleComposeSave = useCallback(({ name, tag, distributionId, pricingId, promotionId }) => {
+    setSavedScenarios(ss => [...ss, {
+      id: `sc-${Date.now()}`,
+      name,
+      tag,
+      createdAt: new Date().toISOString(),
+      distributionId,
+      pricingId,
+      promotionId,
+    }]);
+    setView('scenarios');
+  }, []);
+
+  const deleteScenario = useCallback((id) => {
+    setSavedScenarios(ss => ss.filter(s => s.id !== id));
+  }, []);
+
   useEffect(() => {
     const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
     if (!acctKey) return;
-    localStorage.setItem(`scenario-workspace-${acctKey}`, JSON.stringify({ blocks }));
-  }, [blocks, devData]);
+    localStorage.setItem(`scenario-workspace-${acctKey}`, JSON.stringify({ blocks, savedScenarios }));
+  }, [blocks, savedScenarios, devData]);
 
   // ── Landing (no data loaded) ──────────────────────────────────────────────
 
@@ -922,24 +943,48 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Compare & Scenarios tabs ── */}
-      {(view === 'compare' || view === 'scenarios') && (
+      {/* ── Compare tab ── */}
+      {view === 'compare' && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
-          {view === 'compare' && (
-            <CompareView scenarios={scenarios} fiscalCalendar={fiscalCalendar} />
-          )}
-          {view === 'scenarios' && (
-            <ScenarioListView
-              scenarios={scenarios}
-              blocks={blocks}
-              showBasePlan={showBasePlan}
-              onDeleteBlock={deleteBlock}
-              onDeleteBase={() => setShowBasePlan(false)}
-              onEditBlock={(block) => { loadBlock(block); setView('distribution'); }}
-              onEditBase={() => { loadBase(); setActiveIsBase(true); setView('distribution'); }}
-            />
-          )}
+          <CompareView scenarios={scenarios} fiscalCalendar={fiscalCalendar} />
         </div>
+      )}
+
+      {/* ── Building Blocks tab ── */}
+      {view === 'blocks' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <ScenarioListView
+            blocks={blocks}
+            showBasePlan={showBasePlan}
+            onDeleteBlock={deleteBlock}
+            onDeleteBase={() => setShowBasePlan(false)}
+            onEditBlock={(block) => { loadBlock(block); setView('distribution'); }}
+            onEditBase={() => { loadBase(); setActiveIsBase(true); setView('distribution'); }}
+          />
+        </div>
+      )}
+
+      {/* ── Scenarios tab ── */}
+      {view === 'scenarios' && (
+        <div style={{ flex: 1, overflowY: 'auto' }}>
+          <ScenariosView
+            scenarios={scenarios}
+            savedScenarios={savedScenarios}
+            blocks={blocks}
+            onNewScenario={() => setView('new-scenario')}
+            onDeleteScenario={deleteScenario}
+          />
+        </div>
+      )}
+
+      {/* ── Scenario composer ── */}
+      {view === 'new-scenario' && (
+        <ScenarioComposerView
+          blocks={blocks}
+          existingCount={savedScenarios.length}
+          onSave={handleComposeSave}
+          onCancel={() => setView('scenarios')}
+        />
       )}
 
       {saveModalOpen && (
