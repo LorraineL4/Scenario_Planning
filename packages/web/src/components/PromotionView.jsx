@@ -439,7 +439,7 @@ export default function PromotionView({ rows, fiscalCalendar, accountKey, planPr
             <tr>
               <th className="sticky-l c-pg" style={{ textAlign: 'left' }}>Product Group</th>
               {periods.map(p => (
-                <th key={p} className="num c-mon" style={{ minWidth: 88 }}>{p}</th>
+                <th key={p} className="num c-mon" style={{ minWidth: 88 }}>{fiscalCalendar[p]?.month || p}</th>
               ))}
             </tr>
           </thead>
