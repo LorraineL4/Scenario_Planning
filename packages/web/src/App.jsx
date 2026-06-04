@@ -16,7 +16,7 @@ function devDataToRows(devData) {
   return Object.entries(devData.skus || {}).map(([name, sku], i) => {
     const months = {}
     Object.entries(cal).forEach(([period, info]) => {
-      months[info.month] = Math.round((sku.acv_pct?.[period] || 0) * 100)
+      months[info.month] = Math.round((sku.acv_pct?.[period] || 0) * 10000) / 100
     })
     const periods = Object.keys(cal)
     return {
@@ -24,7 +24,7 @@ function devDataToRows(devData) {
       Product_Group: name,
       SKU_name: name,
       unit_velocity: sku.velocity || 0,
-      current_ACV: Math.round((sku.current_acv || 0) * 100),
+      current_ACV: Math.round((sku.current_acv || 0) * 10000) / 100,
       months,
       dist_prob: Math.round((sku.probability?.[periods[0]] ?? 1.0) * 100),
     }
