@@ -34,12 +34,6 @@ function BlockOption({ block, selected, onSelect }) {
         }}>
           {block.name}
         </div>
-        {block.isBase && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
-            color: 'var(--navy)', background: 'var(--navy-50)', padding: '2px 5px', borderRadius: 3, flex: 'none',
-          }}>BASE</span>
-        )}
       </div>
       {block.note && (
         <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6, paddingLeft: 24 }}>
