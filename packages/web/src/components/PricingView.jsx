@@ -407,7 +407,6 @@ export default function PricingView({
               {allCols.map(p => (
                 <th key={p} className="num c-mon">
                   {fiscalCalendar[p]?.month ?? p}
-                  <br /><span style={{ fontWeight: 400, fontSize: 10, opacity: 0.55 }}>{p}</span>
                 </th>
               ))}
               <th className="sticky-r c-adj">Adjust</th>
