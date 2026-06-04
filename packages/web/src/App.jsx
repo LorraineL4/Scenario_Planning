@@ -395,27 +395,34 @@ export default function App() {
     for (const r of baseRows || []) skuToGroup[r.SKU_name] = r.Product_Group;
     const nameToColor = new Map();
     const grid = {};
+
+    const addSlot = (pg, period, slot, pdata) => {
+      const suffix = slot === 1 ? '1' : '2';
+      const name  = pdata[`name_promo${suffix}`];
+      const weeks = pdata[`weeks_event_promo${suffix}`];
+      if (!name || !weeks) return;
+      const key = `${pg}|||${period}|||${slot}`;
+      if (grid[key]) return; // first SKU in group wins
+      if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
+      const lift = pdata[`lift_promo${suffix}`];
+      grid[key] = {
+        id:            `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}-${slot}`,
+        colorIdx:      nameToColor.get(name),
+        name,
+        promo_price:   Math.round((pdata[`price_promo${suffix}`]  || 0) * 100) / 100,
+        weeks,
+        scan:          Math.round((pdata[`scan_promo${suffix}`]   || 0) * 100) / 100,
+        fixed_fee:     Math.round((pdata[`fixed_promo${suffix}`]  || 0) * 100) / 100,
+        expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
+      };
+    };
+
     for (const [skuName, skuData] of Object.entries(devData.skus || {})) {
       const pg = skuToGroup[skuName];
       if (!pg) continue;
       for (const [period, pdata] of Object.entries(skuData.promo_periods || {})) {
-        const name  = pdata.name_promo1;
-        const weeks = pdata.weeks_event_promo1;
-        if (!name || !weeks) continue;
-        const key = `${pg}|||${period}`;
-        if (grid[key]) continue; // first SKU in group wins
-        if (!nameToColor.has(name)) nameToColor.set(name, nameToColor.size);
-        const lift = pdata.lift_promo1;
-        grid[key] = {
-          id:            `plan-${name.replace(/\s+/g, '-').toLowerCase()}-${period}`,
-          colorIdx:      nameToColor.get(name),
-          name,
-          promo_price:   Math.round((pdata.price_promo1 || 0) * 100) / 100,
-          weeks,
-          scan:          Math.round((pdata.scan_promo1  || 0) * 100) / 100,
-          fixed_fee:     Math.round((pdata.fixed_promo1 || 0) * 100) / 100,
-          expected_lift: lift ? Math.round((lift - 1) * 100) : 0,
-        };
+        addSlot(pg, period, 1, pdata);
+        addSlot(pg, period, 2, pdata);
       }
     }
     const promos = Array.from(nameToColor.entries()).map(([name, colorIdx]) => ({

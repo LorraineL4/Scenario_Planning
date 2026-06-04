@@ -212,16 +212,23 @@ async def compute_scenario(req: ComputeRequest):
             sku = inp.get("skus", {}).get(row.sku_name)
             if not sku:
                 continue
-            for period_id, cell in row.periods.items():
-                p = sku.get("periods", {}).get(period_id)
-                if p is None or cell is None:
+            for period_key, cell in row.periods.items():
+                if cell is None:
                     continue
-                p["name_promo1"]        = cell.name
-                p["price_promo1"]       = cell.promo_price
-                p["weeks_event_promo1"] = cell.weeks
-                p["scan_promo1"]        = cell.scan
-                p["fixed_promo1"]       = cell.fixed_fee
-                p["lift_promo1"]        = (1.0 + cell.expected_lift / 100.0) if cell.expected_lift is not None else None
+                # Period key format is always "P01|||1" or "P01|||2"
+                if "|||" in period_key:
+                    period_id, slot = period_key.split("|||", 1)
+                else:
+                    period_id, slot = period_key, "1"
+                p = sku.get("periods", {}).get(period_id)
+                if p is None:
+                    continue
+                p[f"name_promo{slot}"]              = cell.name
+                p[f"price_promo{slot}"]             = cell.promo_price
+                p[f"weeks_event_promo{slot}"]       = cell.weeks
+                p[f"scan_promo{slot}"]              = cell.scan
+                p[f"fixed_promo{slot}"]             = cell.fixed_fee
+                p[f"lift_promo{slot}"]              = (1.0 + cell.expected_lift / 100.0) if cell.expected_lift is not None else None
 
     try:
         results = run_account(cfg, inp)

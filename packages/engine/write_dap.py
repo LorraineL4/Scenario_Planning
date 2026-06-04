@@ -82,14 +82,24 @@ _PG_ROWS = {
     "brick_promo2":             93,
 }
 
-# Promo UI field → Excel row (slot 1 only; slot 2 not managed by the tool yet)
-_PROMO_UI_TO_ROW = {
-    "name":          _PG_ROWS["name_promo1"],
-    "promo_price":   _PG_ROWS["price_promo1"],
-    "weeks":         _PG_ROWS["weeks_event_promo1"],
-    "scan":          _PG_ROWS["scan_promo1"],
-    "fixed_fee":     _PG_ROWS["fixed_promo1"],
-    "expected_lift": _PG_ROWS["lift_promo1"],   # converted % → multiplier on write
+# UI promo fields mapped per slot. Keys are always "pg|||period|||1" or "pg|||period|||2".
+_PROMO_SLOT_ROWS = {
+    "1": {
+        "name":          _PG_ROWS["name_promo1"],
+        "promo_price":   _PG_ROWS["price_promo1"],
+        "weeks":         _PG_ROWS["weeks_event_promo1"],
+        "scan":          _PG_ROWS["scan_promo1"],
+        "fixed_fee":     _PG_ROWS["fixed_promo1"],
+        "expected_lift": _PG_ROWS["lift_promo1"],
+    },
+    "2": {
+        "name":          _PG_ROWS["name_promo2"],
+        "promo_price":   _PG_ROWS["price_promo2"],
+        "weeks":         _PG_ROWS["weeks_event_promo2"],
+        "scan":          _PG_ROWS["scan_promo2"],
+        "fixed_fee":     _PG_ROWS["fixed_promo2"],
+        "expected_lift": _PG_ROWS["lift_promo2"],
+    },
 }
 
 
@@ -233,9 +243,10 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
     # ── 3. PG sheets — promo slot 1 ───────────────────────────────────────────
     promo: dict = scenario_inputs.get("promo") or {}
     for cell_key, promo_data in promo.items():
-        if "|||" not in cell_key:
+        parts = cell_key.split("|||")
+        if len(parts) != 3:
             continue
-        sku_name, period = cell_key.split("|||", 1)
+        sku_name, period, slot = parts
         col = period_to_pg_col.get(period)
         if col is None:
             continue
@@ -244,7 +255,11 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
             continue
         ws_pg = wb[actual_sheet]
 
-        for ui_field, excel_row in _PROMO_UI_TO_ROW.items():
+        row_map = _PROMO_SLOT_ROWS.get(slot)
+        if row_map is None:
+            continue
+
+        for ui_field, excel_row in row_map.items():
             val = promo_data.get(ui_field)
             if val is None:
                 continue

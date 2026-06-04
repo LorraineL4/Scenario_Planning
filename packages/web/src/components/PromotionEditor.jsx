@@ -168,7 +168,8 @@ export default function PromotionEditor({
     return () => document.removeEventListener('mousedown', handler)
   }, [formOpen])
 
-  const cellKey = (pg, period) => `${pg}|||${period}`
+  // Keys are always 3-part: "pg|||period|||slot" where slot is 1 or 2
+  const cellKey = (pg, period, slot) => `${pg}|||${period}|||${slot}`
 
   // ── Block loading ─────────────────────────────────────────────────────────
 
@@ -205,8 +206,8 @@ export default function PromotionEditor({
 
   // ── Cell interaction ──────────────────────────────────────────────────────
 
-  function handleCellClick(pg, period, e) {
-    const key = cellKey(pg, period)
+  function handleCellClick(pg, period, slot, e) {
+    const key = cellKey(pg, period, slot)
     if (mode === 'selecting') {
       setSelectedCells(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n })
       return
@@ -319,39 +320,45 @@ export default function PromotionEditor({
           <tbody>
             {productGroups.length === 0 ? (
               <tr><td className="empty" colSpan={periods.length + 1}>No data loaded.</td></tr>
-            ) : productGroups.map(pg => (
-              <tr key={pg}>
-                <td className="sticky-l c-pg pg-cell pg-lead">{pg}</td>
-                {periods.map(period => {
-                  const key = cellKey(pg, period)
-                  const entry = grid[key]
-                  const sel = selectedCells.has(key)
-                  const isActive = formOpen && editingKey === key
-                  const c = entry ? pal(entry.colorIdx) : null
-                  return (
-                    <td
-                      key={period}
-                      onClick={(e) => handleCellClick(pg, period, e)}
-                      style={{
-                        cursor: 'pointer', padding: '3px 6px', verticalAlign: 'middle',
-                        height: 36, minWidth: 88,
-                        background: sel ? 'rgba(22,87,136,.12)' : isActive ? 'rgba(22,87,136,.06)' : entry ? c.bg : undefined,
-                        boxShadow: sel ? 'inset 0 0 0 2px var(--navy)' : isActive ? 'inset 0 0 0 2px var(--navy)' : entry ? `inset 0 0 0 1px ${c.bd}` : undefined,
-                        transition: 'background .1s',
-                      }}
-                    >
-                      {entry ? (
-                        <div style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>
-                          {entry.name}
-                        </div>
-                      ) : selecting ? (
-                        <div style={{ height: 22, borderRadius: 4, border: `1.5px dashed ${sel ? 'var(--navy)' : 'var(--line-strong)'}` }} />
-                      ) : null}
-                    </td>
-                  )
-                })}
-              </tr>
-            ))}
+            ) : productGroups.map((pg, gi) => {
+              const renderPromoRow = (slot, isFirst) => (
+                <tr key={pg + '-' + slot} className={isFirst && gi > 0 ? 'pg-start' : ''}>
+                  <td className={'sticky-l c-pg pg-cell' + (isFirst ? ' pg-lead' : '')}
+                    style={isFirst ? {} : { fontSize: 11, color: 'var(--muted)', fontWeight: 500, paddingTop: 1, paddingBottom: 1 }}>
+                    {isFirst ? pg : 'Promo 2'}
+                  </td>
+                  {periods.map(period => {
+                    const key = cellKey(pg, period, slot)
+                    const entry = grid[key]
+                    const sel = selectedCells.has(key)
+                    const isActive = formOpen && editingKey === key
+                    const c = entry ? pal(entry.colorIdx) : null
+                    return (
+                      <td
+                        key={period}
+                        onClick={(e) => handleCellClick(pg, period, slot, e)}
+                        style={{
+                          cursor: 'pointer', padding: '3px 6px', verticalAlign: 'middle',
+                          height: 34, minWidth: 88,
+                          background: sel ? 'rgba(22,87,136,.12)' : isActive ? 'rgba(22,87,136,.06)' : entry ? c.bg : undefined,
+                          boxShadow: sel ? 'inset 0 0 0 2px var(--navy)' : isActive ? 'inset 0 0 0 2px var(--navy)' : entry ? `inset 0 0 0 1px ${c.bd}` : undefined,
+                          transition: 'background .1s',
+                        }}
+                      >
+                        {entry ? (
+                          <div style={{ fontSize: 11.5, fontWeight: 600, color: c.fg, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }}>
+                            {entry.name}
+                          </div>
+                        ) : selecting ? (
+                          <div style={{ height: 22, borderRadius: 4, border: `1.5px dashed ${sel ? 'var(--navy)' : 'var(--line-strong)'}` }} />
+                        ) : null}
+                      </td>
+                    )
+                  })}
+                </tr>
+              )
+              return [renderPromoRow(1, true), renderPromoRow(2, false)]
+            })}
           </tbody>
         </table>
       </div>
