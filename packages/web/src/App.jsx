@@ -213,9 +213,81 @@ function ApplyPopover({ row, anchor, onApply, onClose }) {
   );
 }
 
+// ─── Plan selector dropdown ─────────────────────────────────────────────────
+
+function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const label = activeBlock ? activeBlock.name : 'Base data';
+  const btnStyle = {
+    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
+    borderRadius: 7, border: '1px solid var(--line)',
+    background: activeBlock ? 'var(--navy-50)' : 'var(--panel)',
+    color: activeBlock ? 'var(--navy)' : 'var(--ink-2)',
+    fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
+    maxWidth: 240,
+  };
+  const itemStyle = (active) => ({
+    display: 'flex', alignItems: 'center', width: '100%',
+    padding: '8px 12px', borderRadius: 7, border: 'none',
+    background: active ? 'var(--navy-50)' : 'transparent',
+    color: active ? 'var(--navy)' : 'var(--ink)',
+    fontWeight: active ? 700 : 500, fontSize: 13,
+    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+  });
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button onClick={() => setOpen(o => !o)} style={btnStyle}>
+        <Icon name="table" size={13} />
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+        <Icon name="arrowDn" size={12} style={{ flex: 'none' }} />
+      </button>
+      {open && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, marginTop: 4,
+          background: 'var(--panel)', border: '1px solid var(--line)',
+          borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,.12)', zIndex: 100,
+          minWidth: 220, overflow: 'hidden',
+        }}>
+          <div style={{ padding: '6px 4px' }}>
+            <button onClick={() => { onSelectBase(); setOpen(false); }} style={itemStyle(!activeBlock)}>
+              <span style={{ flex: 1 }}>Base data</span>
+              {!activeBlock && <span style={{ fontSize: 11, fontWeight: 700 }}>current</span>}
+            </button>
+            {blocks.length > 0 && (
+              <>
+                <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
+                {blocks.map(bl => (
+                  <button key={bl.id} onClick={() => { onSelectBlock(bl); setOpen(false); }} style={itemStyle(activeBlock?.id === bl.id)}>
+                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bl.name}</span>
+                    {activeBlock?.id === bl.id && <span style={{ fontSize: 11, fontWeight: 700, flex: 'none' }}>current</span>}
+                  </button>
+                ))}
+              </>
+            )}
+            {blocks.length === 0 && (
+              <div style={{ padding: '4px 12px 8px', fontSize: 12, color: 'var(--muted)' }}>
+                No saved blocks yet
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── App shell ─────────────────────────────────────────────────────────────
 
-function TopBar({ view, setView, account }) {
+function TopBar({ view, setView, account, onExport, onImportClick }) {
   const tab = (id, icon, label) => {
     const active = view === id
     return (
@@ -230,6 +302,16 @@ function TopBar({ view, setView, account }) {
       </button>
     )
   }
+  const ghostBtn = (icon, label, onClick) => (
+    <button onClick={onClick} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 11px',
+      borderRadius: 8, border: '1px solid var(--line)', background: 'var(--panel)',
+      color: 'var(--ink-2)', fontWeight: 600, fontSize: 13, cursor: 'pointer',
+      fontFamily: 'inherit', transition: 'all .15s',
+    }}>
+      {icon && <Icon name={icon} size={14} />}{label}
+    </button>
+  )
   return (
     <header style={{
       display: 'flex', alignItems: 'center', gap: 16, padding: '0 var(--gut)', height: 60,
@@ -254,19 +336,16 @@ function TopBar({ view, setView, account }) {
       {/* Tab nav */}
       <nav style={{ display: 'flex', gap: 2, marginLeft: 12 }}>
         {tab('distribution', 'table',   'Distribution')}
+        {tab('pricing',      'sliders', 'Pricing')}
+        {tab('promotion',    'star',    'Promotion')}
         {tab('compare',      'compare', 'Compare')}
         {tab('scenarios',    'grid',    'Scenarios')}
       </nav>
 
       {/* Right side */}
-      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button disabled style={{
-          display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 12px',
-          borderRadius: 8, border: '1px solid var(--line)', background: 'var(--navy)',
-          color: '#fff', fontWeight: 600, fontSize: 13, opacity: 0.45, cursor: 'not-allowed', fontFamily: 'inherit',
-        }}>
-          <Icon name="plus" size={14} />New scenario
-        </button>
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 8 }}>
+        {ghostBtn('download', 'Export', onExport)}
+        {ghostBtn(null, 'Import', onImportClick)}
         <div style={{
           width: 32, height: 32, borderRadius: 99, background: 'var(--slate)',
           color: '#fff', display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700,
@@ -328,6 +407,9 @@ export default function App() {
   // Engine / compare state
   const [devData, setDevData] = useState(null);
   const [view, setView]       = useState('compare');
+  const [blocks, setBlocks]         = useState({ distribution: [], pricing: [], promotion: [] });
+  const [baseRows, setBaseRows]     = useState(null);
+  const [activeBlockId, setActiveBlockId] = useState(null);
 
   // ── Data loading ──────────────────────────────────────────────────────────
 
@@ -337,9 +419,14 @@ export default function App() {
       const res = await fetch('/api/dev-data');
       if (!res.ok) { const j = await res.json().catch(() => ({})); throw new Error(j.detail || res.statusText); }
       const data = await res.json();
-      setRows(devDataToRows(data));
-      setMeta({ sheet: data.account?.account_name || 'Dev data', count: devDataToRows(data).length });
+      const initialRows = devDataToRows(data);
+      setRows(initialRows);
+      setMeta({ sheet: data.account?.account_name || 'Dev data', count: initialRows.length });
+      setBaseRows(initialRows);
+      setActiveBlockId(null);
       setDevData(data);
+      const acctKey = data.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
+      if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); } catch {} }
       setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
@@ -366,12 +453,16 @@ export default function App() {
         const tableRows = parsedResult.value.rows.map(r => ({ ...r, months: { ...r.months } }));
         setRows(tableRows);
         setMeta({ sheet: parsedResult.value.sheet, count: tableRows.length, file: file.name });
+        setBaseRows(tableRows);
+        setActiveBlockId(null);
       } else {
         throw parsedResult.reason;
       }
 
       if (engineResult.status === 'fulfilled') {
         setDevData(engineResult.value);
+        const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
+        if (acctKey) { try { const saved = JSON.parse(localStorage.getItem(`scenario-workspace-${acctKey}`) || 'null'); if (saved?.blocks) setBlocks(saved.blocks); } catch {} }
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -467,6 +558,80 @@ export default function App() {
   const scenarios = useMemo(() => devData ? [buildBaseScenario(devData)] : [], [devData]);
   const fiscalCalendar = devData?.fiscal_calendar || {};
   const skuCount = devData ? Object.keys(devData.skus || {}).length : rows?.length;
+  const activeBlock = activeBlockId ? (blocks.distribution.find(b => b.id === activeBlockId) ?? null) : null;
+
+  // ── Building block actions ────────────────────────────────────────────────
+
+  const importRef = useRef(null);
+
+  const loadBlock = useCallback((block) => {
+    setRows(block.inputs.map(r => ({ ...r, months: { ...r.months } })));
+    setEdited(new Set());
+    setActiveBlockId(block.id);
+  }, []);
+
+  const loadBase = useCallback(() => {
+    if (!baseRows) return;
+    setRows(baseRows.map(r => ({ ...r, months: { ...r.months } })));
+    setEdited(new Set());
+    setActiveBlockId(null);
+  }, [baseRows]);
+
+  const saveDistributionBlock = useCallback((name) => {
+    setBlocks(b => ({
+      ...b,
+      distribution: [...b.distribution, {
+        id: `dist-${Date.now()}`,
+        name,
+        note: `${rows.length} SKUs · saved`,
+        created_at: new Date().toISOString(),
+        inputs: rows.map(r => ({ ...r, months: { ...r.months } })),
+      }],
+    }));
+  }, [rows]);
+
+  const deleteBlock = useCallback((type, id) => {
+    setBlocks(b => ({ ...b, [type]: b[type].filter(bl => bl.id !== id) }));
+    if (type === 'distribution' && activeBlockId === id && baseRows) {
+      setRows(baseRows.map(r => ({ ...r, months: { ...r.months } })));
+      setEdited(new Set());
+      setActiveBlockId(null);
+    }
+  }, [activeBlockId, baseRows]);
+
+  const handleExport = useCallback(() => {
+    const acctName = devData?.account?.account_name || 'account';
+    const payload = {
+      _version: '1.0',
+      _meta: { account: acctName, created_at: new Date().toISOString() },
+      blocks,
+      scenarios: scenarios.map(s => ({ id: s.id, name: s.name, tag: s.tag })),
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${acctName.replace(/\s+/g, '_')}_scenario.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [blocks, devData, scenarios]);
+
+  const handleImportFile = useCallback((e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try { const data = JSON.parse(ev.target.result); if (data.blocks) setBlocks(data.blocks); } catch {}
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  }, []);
+
+  useEffect(() => {
+    const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
+    if (!acctKey) return;
+    localStorage.setItem(`scenario-workspace-${acctKey}`, JSON.stringify({ blocks }));
+  }, [blocks, devData]);
 
   // ── Landing (no data loaded) ──────────────────────────────────────────────
 
@@ -502,15 +667,22 @@ export default function App() {
 
   return (
     <div className={"app" + (dragging ? " drag" : "")}>
-      <TopBar view={view} setView={setView} account={devData?.account} />
+      <TopBar view={view} setView={setView} account={devData?.account} onExport={handleExport} onImportClick={() => importRef.current?.click()} />
+      <input ref={importRef} type="file" accept=".json" hidden onChange={handleImportFile} />
       <ContextBar account={devData?.account} skuCount={skuCount} />
 
       {/* ── Distribution tab ── */}
       {view === 'distribution' && (
         <>
           <div className="bar">
-            <div className="bar-left">
-              <div className="bar-sub" style={{ paddingLeft: 4 }}>
+            <div className="bar-left" style={{ gap: 8 }}>
+              <PlanDropdown
+                activeBlock={activeBlock}
+                blocks={blocks.distribution}
+                onSelectBase={loadBase}
+                onSelectBlock={loadBlock}
+              />
+              <div className="bar-sub">
                 {meta?.file ? meta.file + ' · ' : ''}{meta?.sheet} · {totalShown} of {rows.length} SKUs
               </div>
             </div>
@@ -522,6 +694,10 @@ export default function App() {
                 <input placeholder="Search SKU or product group…" value={search} onChange={(e) => setSearch(e.target.value)} />
                 {search && <button className="search-x" onClick={() => setSearch("")}>✕</button>}
               </div>
+              <button className="btn sm" onClick={() => {
+                const name = prompt('Name this distribution block:');
+                if (name?.trim()) saveDistributionBlock(name.trim());
+              }}>Save as block…</button>
               <label className="btn sm">
                 Load file
                 <input type="file" accept=".xlsx" hidden onChange={(e) => handleFile(e.target.files[0])} />
@@ -604,14 +780,26 @@ export default function App() {
         </>
       )}
 
+      {/* ── Pricing / Promotion placeholder tabs ── */}
+      {(view === 'pricing' || view === 'promotion') && (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div style={{ textAlign: 'center', color: 'var(--muted)' }}>
+            <div style={{ fontWeight: 700, fontSize: 15, color: 'var(--ink-2)', marginBottom: 6 }}>
+              {view === 'pricing' ? 'Pricing' : 'Promotion'} editor
+            </div>
+            <div style={{ fontSize: 13 }}>In development — coming soon</div>
+          </div>
+        </div>
+      )}
+
       {/* ── Compare & Scenarios tabs ── */}
-      {view !== 'distribution' && (
+      {(view === 'compare' || view === 'scenarios') && (
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {view === 'compare' && (
             <CompareView scenarios={scenarios} fiscalCalendar={fiscalCalendar} />
           )}
           {view === 'scenarios' && (
-            <ScenarioListView scenarios={scenarios} />
+            <ScenarioListView scenarios={scenarios} blocks={blocks} onDeleteBlock={deleteBlock} />
           )}
         </div>
       )}
