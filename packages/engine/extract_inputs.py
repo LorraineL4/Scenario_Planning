@@ -218,6 +218,7 @@ def extract_distribution_inputs(wb, periods=None, period_col=None) -> dict:
         if name not in pg_primary and velocity > 0:
             pg_primary[name] = {
                 "velocity":                 velocity,
+                "current_acv":              current_acv,
                 "slotting_per_store":       get(_DIST_COL_SLOT_PER_STORE),
                 "slotting_cases_per_store": get(_DIST_COL_SLOT_CASES),
                 "acv_pct":                  {p: acv_pct[p] for p in periods},
@@ -229,6 +230,7 @@ def extract_distribution_inputs(wb, periods=None, period_col=None) -> dict:
         primary = pg_primary.get(name, {})
         pgs[name] = {
             "velocity":                   primary.get("velocity", 0.0),
+            "current_acv":                primary.get("current_acv", 0.0),
             "slotting_lump_sum":          pg_slotting.get(name, 0.0),
             "slotting_per_store":         primary.get("slotting_per_store"),
             "slotting_cases_per_store":   primary.get("slotting_cases_per_store"),
@@ -298,6 +300,8 @@ def extract(excel_path: Path) -> dict:
             pg_data["periods"][period]["acv_pct"] = acv.get(period)
         skus[name] = {
             "velocity":                     dist.get("velocity"),
+            "current_acv":                  dist.get("current_acv"),
+            "acv_pct":                      dist.get("acv_pct", {}),
             "slotting_lump_sum":            dist.get("slotting_lump_sum"),
             "slotting_per_store":           dist.get("slotting_per_store"),
             "slotting_cases_per_store":     dist.get("slotting_cases_per_store"),
