@@ -110,7 +110,6 @@ def _build_config(cfg_data: dict, inp_data: dict, sku: str, period: str) -> Conf
         digital_sales_pct       = acct["digital_sales_pct"] or 0.0,
         other_program_pct       = acct["other_program_pct"] or 0.0,
         constant_elasticity     = _get_elasticity(cfg_data, sku, acct.get("sales_channel", "")),
-        current_base_price      = static.get("current_edp") or 0.0,
     )
 
 
@@ -140,6 +139,7 @@ def _build_inputs(
         edlp_mcb_pct          = f(p["edlp_mcb_pct"]),
         upcharge_dist_pct     = f(static["upcharge_dist_pct"]),
         upcharge_cat_pct      = f(static["upcharge_cat_pct"]),
+        current_base_price    = f(inp_data["skus"][sku].get("current_edp")),
         price_impact_manual   = p["price_impact_manual"],
         misc_impact_pct       = f(p["misc_impact_pct"]),
 

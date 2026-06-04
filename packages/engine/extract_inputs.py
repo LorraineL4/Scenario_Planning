@@ -136,7 +136,9 @@ _DIST_COL_SLOT_CASES     = 41  # AO — slotting cases per store
 _DIST_DATA_START_ROW  = 7
 _DIST_HEADER_KEYWORDS = {"SKU", "PRODUCT", "ITEM", "NAME", "GROUP", "DESCRIPTION"}
 
-_PG_COL_CURRENT = 4  # D — current values column in PG sheets (before P01–P12 at E onward)
+_PG_COL_CURRENT     = 4   # D — current values column in PG sheets (before P01–P12 at E onward)
+_PG_COL_CURRENT_EDP = 20  # T — dedicated "Input EDP" reference price for elasticity calc
+_PG_ROW_BASE_PRICE  = 10  # row 10 = base_price / everyday retail shelf price
 
 
 # ---------------------------------------------------------------------------
@@ -263,7 +265,8 @@ def extract_pg_inputs(ws, period_col=None) -> dict:
         field: _coerce(ws.cell(row=meta["row"], column=_PG_COL_CURRENT).value)
         for field, meta in PG_PERIOD_INPUTS.items()
     }
-    return {"periods": periods, "current": current}
+    current_edp = _num(ws.cell(row=_PG_ROW_BASE_PRICE, column=_PG_COL_CURRENT_EDP).value)
+    return {"periods": periods, "current": current, "current_edp": current_edp}
 
 
 # ---------------------------------------------------------------------------
@@ -306,6 +309,7 @@ def extract(excel_path: Path) -> dict:
             "slotting_cases_per_store":     dist.get("slotting_cases_per_store"),
             "probability":                  dist.get("probability"),
             "effective_velocity_by_period": dist.get("effective_velocity_by_period"),
+            "current_edp":                  pg_data["current_edp"],
             "current_inputs":               pg_data["current"],
             "periods":                      pg_data["periods"],
         }

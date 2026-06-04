@@ -202,7 +202,6 @@ PG_STATIC_INPUTS = {
     "upcharge_cat_pct":  {"row": 23},
     "case_count":        {"row": 148},
     "cogs":              {"row": 147},
-    "current_edp":       {"row": 10, "col": 20},  # col T — "Input EDP", reference price for elasticity
 }
 
 

@@ -23,7 +23,6 @@ class Config:
     digital_sales_pct: float
     other_program_pct: float
     constant_elasticity: float  # from Sales Rates table (e.g. -0.96 for COR 1L EVOO)
-    current_base_price: float   # reference price used for elasticity auto-calc
     net_sales_trade_components: FrozenSet[str] = field(default_factory=lambda: frozenset({
         "retailer_working_spend",
         "distributor_working",
@@ -49,6 +48,7 @@ class ScenarioInputs:
     edlp_mcb_pct: float         # MCB % on everyday
     upcharge_dist_pct: float    # distributor upcharge (e.g. 0.08)
     upcharge_cat_pct: float     # catalog upcharge (e.g. 0.48) — used for MCB cost to mfr
+    current_base_price: float       # col T "Input EDP" — reference for elasticity auto-calc
     price_impact_manual: Optional[float]  # None = auto-calc from prices; 0.0 = no change
     misc_impact_pct: float
 
@@ -107,8 +107,8 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     # --- 2. Price elasticity impact ---
     if inp.price_impact_manual is not None:
         price_elasticity_impact = inp.price_impact_manual
-    elif inp.base_price and cfg.current_base_price:
-        price_elasticity_impact = (inp.base_price / cfg.current_base_price) ** cfg.constant_elasticity - 1
+    elif inp.base_price and inp.current_base_price:
+        price_elasticity_impact = (inp.base_price / inp.current_base_price) ** cfg.constant_elasticity - 1
     else:
         price_elasticity_impact = 0.0
 
@@ -284,7 +284,6 @@ config = Config(
     digital_sales_pct=0.0,
     other_program_pct=0.0,
     constant_elasticity=-0.96,            # not used — price_impact_manual is set below
-    current_base_price=38.99,             # not used — price_impact_manual is set below
 )
 
 inputs = ScenarioInputs(
@@ -298,6 +297,7 @@ inputs = ScenarioInputs(
     edlp_mcb_pct=0.0,
     upcharge_dist_pct=0.08,
     upcharge_cat_pct=0.48,
+    current_base_price=38.99,             # col D baseline (not used — price_impact_manual is set)
     price_impact_manual=-0.05840492512496598,  # auto-calc result from Excel row 13
     misc_impact_pct=0.0,
 
