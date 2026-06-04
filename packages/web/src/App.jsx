@@ -541,13 +541,14 @@ export default function App() {
     reader.readAsText(file);
   }, []);
 
-  const handleWriteToExcel = useCallback((scenario, scenarioInputs) => {
+  const handleWriteToExcel = useCallback((scenario, scenarioInputs, { onStart, onEnd } = {}) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx';
     input.onchange = async (e) => {
       const file = e.target.files?.[0];
       if (!file) return;
+      onStart?.();
       const form = new FormData();
       form.append('file', file);
       try {
@@ -557,6 +558,7 @@ export default function App() {
         }));
       } catch (err) {
         alert(`Failed to serialize scenario data: ${err.message}`);
+        onEnd?.();
         return;
       }
       try {
@@ -576,6 +578,8 @@ export default function App() {
         URL.revokeObjectURL(url);
       } catch (err) {
         alert(`Write-back failed: ${err.message}`);
+      } finally {
+        onEnd?.();
       }
     };
     input.click();

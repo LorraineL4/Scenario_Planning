@@ -35,6 +35,7 @@ const SUB_TABS = ['distribution', 'pricing', 'promotion']
 function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, basePricingSnapshot, basePromoSnapshot, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months, onWriteToExcel }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
+  const [writing, setWriting] = useState(false)
 
   const isBase = scenario?._isBase === true
   const savedDistId    = scenario?.distributionId || '__base__'
@@ -252,15 +253,18 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
                   })),
                   pricing: pricingBlock?.inputs ?? basePricingSnapshot ?? {},
                   promo: (promoBlock?.inputs ?? basePromoSnapshot ?? basePromoState ?? {}).grid ?? {},
-                })
+                }, { onStart: () => setWriting(true), onEnd: () => setWriting(false) })
               }}
+              disabled={writing}
               style={{
                 fontSize: 13, fontWeight: 600, padding: '5px 12px', borderRadius: 7,
-                border: '1px solid var(--line-strong)', background: 'var(--panel)',
-                color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit',
+                border: '1px solid var(--line-strong)',
+                background: writing ? 'var(--panel-2)' : 'var(--panel)',
+                color: writing ? 'var(--muted)' : 'var(--ink-2)',
+                cursor: writing ? 'default' : 'pointer', fontFamily: 'inherit',
               }}
               title="Write this scenario's inputs back to a DAP workbook"
-            >Write to Excel</button>
+            >{writing ? 'Generating…' : 'Write to Excel'}</button>
             {confirming ? (
               <div style={{ display: 'flex', gap: 6 }}>
                 <button onClick={() => onDelete(scenario.id)} style={{
