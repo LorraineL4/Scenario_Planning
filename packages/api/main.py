@@ -192,8 +192,14 @@ async def compute_scenario(req: ComputeRequest):
                 if pdata.edlp_mcb_pct        is not None: p["edlp_mcb_pct"]        = pdata.edlp_mcb_pct
 
     if req.promo_rows is not None:
-        # Promo block is active: clear all promo slots for all SKUs, then apply block
-        for sku_data in inp.get("skus", {}).values():
+        # Promo block is a per-SKU complete replacement: clear all promo slots for
+        # SKUs that appear in the block, then apply the block's cells for those SKUs.
+        # SKUs NOT in the block retain their base-plan promos unchanged.
+        managed_skus = {row.sku_name for row in req.promo_rows}
+        for sku_name in managed_skus:
+            sku_data = inp.get("skus", {}).get(sku_name)
+            if not sku_data:
+                continue
             for p_data in sku_data.get("periods", {}).values():
                 for slot in ("1", "2"):
                     p_data[f"name_promo{slot}"]         = None
@@ -210,6 +216,7 @@ async def compute_scenario(req: ComputeRequest):
                 p = sku.get("periods", {}).get(period_id)
                 if p is None or cell is None:
                     continue
+                p["name_promo1"]        = cell.name
                 p["price_promo1"]       = cell.promo_price
                 p["weeks_event_promo1"] = cell.weeks
                 p["scan_promo1"]        = cell.scan
