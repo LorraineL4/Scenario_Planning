@@ -413,12 +413,7 @@ function TopBar({ view, setView, account, onExport, onImportClick }) {
     }}>
       {/* Logo */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <div style={{
-          width: 30, height: 30, background: 'var(--navy)', borderRadius: 7,
-          display: 'grid', placeItems: 'center', transform: 'rotate(45deg)',
-        }}>
-          <div style={{ width: 11, height: 11, background: '#F1E3BB', borderRadius: 2 }} />
-        </div>
+        <img src="/logo.svg" alt="Omnium" style={{ height: 36, width: 'auto' }} />
         <div style={{ lineHeight: 1 }}>
           <div style={{ fontWeight: 800, fontSize: 15, letterSpacing: '.14em', color: 'var(--ink)' }}>OMNIUM</div>
           <div style={{ fontSize: 9.5, letterSpacing: '.16em', color: 'var(--muted)', fontWeight: 600, marginTop: 2, textTransform: 'uppercase' }}>
@@ -793,7 +788,7 @@ export default function App() {
     return (
       <div className={"landing" + (dragging ? " drag" : "")}>
         <div className="landing-card">
-          <div className="brand-mark">DAP</div>
+          <img src="/logo.svg" alt="Omnium" style={{ height: 54, width: 'auto' }} />
           <h1>Scenario Planner</h1>
           <p className="lede">
             Drop your DAP workbook (<code>.xlsx</code>) anywhere to load the distribution table and run the financial engine.
