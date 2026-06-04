@@ -225,7 +225,7 @@ function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  const label = activeBlock ? activeBlock.name : 'Base data';
+  const label = activeBlock ? activeBlock.name : 'Base plan';
   const btnStyle = {
     display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
     borderRadius: 7, border: '1px solid var(--line)',
@@ -259,7 +259,7 @@ function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
         }}>
           <div style={{ padding: '6px 4px' }}>
             <button onClick={() => { onSelectBase(); setOpen(false); }} style={itemStyle(!activeBlock)}>
-              <span style={{ flex: 1 }}>Base data</span>
+              <span style={{ flex: 1 }}>Base plan</span>
               {!activeBlock && <span style={{ fontSize: 11, fontWeight: 700 }}>current</span>}
             </button>
             {blocks.length > 0 && (

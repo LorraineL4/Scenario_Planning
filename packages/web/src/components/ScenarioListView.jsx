@@ -127,7 +127,7 @@ export default function ScenarioListView({ scenarios = [], blocks = { distributi
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {blocks.distribution.length === 0 ? (
                 <div style={{ color: 'var(--muted)', fontSize: 12.5, fontStyle: 'italic', paddingLeft: 2 }}>
-                  No blocks saved — use "Save as block…" in the Distribution tab
+                  No blocks saved — use "Save as block…" in the Distribution tab to snapshot the current plan
                 </div>
               ) : (
                 blocks.distribution.map(bl => (
