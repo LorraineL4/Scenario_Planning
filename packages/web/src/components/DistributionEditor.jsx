@@ -183,10 +183,15 @@ export default function DistributionEditor({
     (initialRows || []).map(r => ({ ...r, months: { ...r.months } }))
   )
 
-  useEffect(() => { onDraftChange?.(rows) }, [rows]) // eslint-disable-line
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock)
   const [editing, setEditing]   = useState(null)
   const [edited, setEdited]     = useState(() => new Set())
+
+  // Only send draft rows when a block is loaded or edits exist — otherwise let
+  // the backend use its raw inputs.json to avoid rounding drift from devDataToRows.
+  useEffect(() => {
+    onDraftChange?.(activeBlock || edited.size > 0 ? rows : null)
+  }, [rows, activeBlock, edited]) // eslint-disable-line
   const [popover, setPopover]   = useState(null)
   const [search, setSearch]     = useState('')
   const [saveModalOpen, setSaveModalOpen] = useState(false)

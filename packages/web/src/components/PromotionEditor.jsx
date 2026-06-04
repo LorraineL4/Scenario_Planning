@@ -148,8 +148,11 @@ export default function PromotionEditor({
   const [grid, setGrid]               = useState(() => ({ ...(initialGrid || {}) }))
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock || null)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
+  const [hasEdits, setHasEdits] = useState(false)
 
-  useEffect(() => { onDraftChange?.({ grid, promos }) }, [grid, promos]) // eslint-disable-line
+  useEffect(() => {
+    onDraftChange?.(activeBlock || hasEdits ? { grid, promos } : null)
+  }, [grid, promos, activeBlock, hasEdits]) // eslint-disable-line
 
   const [selectedCells, setSelectedCells] = useState(new Set())
   const [formOpen, setFormOpen]           = useState(false)
@@ -177,13 +180,13 @@ export default function PromotionEditor({
 
   const loadBase = () => {
     setGrid({ ...baseGrid }); setPromos([...basePromos])
-    setActiveBlock(null); setFormOpen(false); setMode('idle')
+    setActiveBlock(null); setHasEdits(false); setFormOpen(false); setMode('idle')
     onBlockChange?.('__base__')
   }
 
   const loadBlock = (block) => {
     setGrid({ ...(block.inputs?.grid || {}) }); setPromos([...(block.inputs?.promos || [])])
-    setActiveBlock(block); setFormOpen(false); setMode('idle')
+    setActiveBlock(block); setHasEdits(false); setFormOpen(false); setMode('idle')
     onBlockChange?.(block.id)
   }
 
@@ -241,13 +244,13 @@ export default function PromotionEditor({
     }
     if (!existing) setPromos(ps => [...ps, { id: promo.id, colorIdx, name }])
     setGrid(g => ({ ...g, [editingKey]: promo }))
-    setFormOpen(false); setMode('idle'); setEditingKey(null)
+    setHasEdits(true); setFormOpen(false); setMode('idle'); setEditingKey(null)
   }
 
   function handleUpdateCell() {
     if (!editingKey) return
     setGrid(g => ({ ...g, [editingKey]: { ...(g[editingKey] || {}), name: formValues.name.trim(), promo_price: parseFloat(formValues.promo_price) || 0, weeks: parseInt(formValues.weeks) || 0, scan: parseFloat(formValues.scan) || 0, fixed_fee: parseFloat(formValues.fixed_fee) || 0, expected_lift: parseFloat(formValues.expected_lift) || 0 } }))
-    setFormOpen(false); setMode('idle'); setEditingKey(null)
+    setHasEdits(true); setFormOpen(false); setMode('idle'); setEditingKey(null)
   }
 
   function handleCopyClick() {
@@ -259,13 +262,13 @@ export default function PromotionEditor({
   function handlePopulate() {
     if (!pendingPromo || !selectedCells.size) return
     setGrid(g => { const next = { ...g }; for (const k of selectedCells) next[k] = { ...pendingPromo, id: `promo-${Date.now()}-${k}` }; return next })
-    setSelectedCells(new Set()); setPendingPromo(null); setMode('idle')
+    setHasEdits(true); setSelectedCells(new Set()); setPendingPromo(null); setMode('idle')
   }
 
   function handleRemoveCell() {
     if (!editingKey) return
     setGrid(g => { const next = { ...g }; delete next[editingKey]; return next })
-    setFormOpen(false); setMode('idle'); setEditingKey(null)
+    setHasEdits(true); setFormOpen(false); setMode('idle'); setEditingKey(null)
   }
 
   const selecting = mode === 'selecting'

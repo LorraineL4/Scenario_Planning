@@ -200,12 +200,14 @@ export default function PricingView({
   const allCols    = useMemo(() => periods, [periods])
 
   const [pricingData, setPricingData] = useState({})
-
-  useEffect(() => { onDraftChange?.(pricingData) }, [pricingData]) // eslint-disable-line
   const [collapsed,   setCollapsed]   = useState(() => new Set())
   const [editing,     setEditing]     = useState(null)   // { sku, field, period }
   const [edited,      setEdited]      = useState(() => new Set())
   const [activeBlock, setActiveBlock] = useState(null)
+
+  useEffect(() => {
+    onDraftChange?.(activeBlock || edited.size > 0 ? pricingData : null)
+  }, [pricingData, activeBlock, edited]) // eslint-disable-line
   const [saveModalOpen, setSaveModalOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [adjustPopover, setAdjustPopover] = useState(null)  // { skuName, anchor }
