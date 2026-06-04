@@ -303,7 +303,13 @@ export default function PricingView({
     const results = devData?.results?.skus?.[skuName]
     const bu    = results?.periods?.[period]?.base_units
     const weeks = fiscalCalendar?.[period]?.weeks ?? 4
-    weeklyBaseline = bu != null ? bu / weeks : null
+    if (bu != null) {
+      const rawBaseline = bu / weeks
+      const origPIM = devData?.skus?.[skuName]?.pricing_periods?.[period]?.price_impact_manual ?? 0
+      const newPIM  = pdata.price_impact_manual ?? origPIM
+      const adjustment = (1 + newPIM) / (1 + origPIM)
+      weeklyBaseline = rawBaseline * adjustment
+    }
 
     return { _weekly_baseline: weeklyBaseline, _ed_nuc: edNuc, _retail_margin: retailMargin }
   }, [pricingData, devData, fiscalCalendar])
