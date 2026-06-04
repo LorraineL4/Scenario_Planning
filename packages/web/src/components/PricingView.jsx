@@ -190,6 +190,7 @@ export default function PricingView({
   fiscalCalendar = {},
   blocks = [],
   initialActiveBlock = null,
+  basePricingSnapshot = null,
   onSaveNew,
   onOverwrite,
   onBlockChange,
@@ -216,13 +217,13 @@ export default function PricingView({
       setActiveBlock(initialActiveBlock)
       setCollapsed(new Set(Object.keys(data)))
     } else {
-      const data = initFromDevData(devData, periods)
+      const data = basePricingSnapshot ?? initFromDevData(devData, periods)
       setPricingData(data)
       setCollapsed(new Set(Object.keys(data)))
     }
     setEdited(new Set())
     setEditing(null)
-  }, [devData, periods])  // eslint-disable-line
+  }, [devData, periods, basePricingSnapshot])  // eslint-disable-line
 
   // ── Derived ───────────────────────────────────────────────────────────────
 
@@ -316,8 +317,12 @@ export default function PricingView({
   }
 
   const handleOverwrite = () => {
-    if (!activeBlock) return
-    onOverwrite?.(activeBlock.id, snapshot())
+    if (activeBlock) {
+      onOverwrite?.(activeBlock.id, snapshot())
+    } else {
+      onOverwrite?.('__base__', snapshot())
+      onBlockChange?.('__base__')
+    }
     setSaveModalOpen(false)
   }
 

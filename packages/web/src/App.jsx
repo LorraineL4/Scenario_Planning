@@ -215,7 +215,9 @@ export default function App() {
   const [blockRevision, setBlockRevision] = useState(0);
   const [savedScenarios, setSavedScenarios] = useState([]);
   const [baseScenarioOverrides, setBaseScenarioOverrides] = useState({});
-  const [baseRows, setBaseRows]     = useState(null);
+  const [baseRows, setBaseRows]               = useState(null);
+  const [basePricingSnapshot, setBasePricingSnapshot] = useState(null);
+  const [basePromoSnapshot,   setBasePromoSnapshot]   = useState(null);
   const [showBasePlan, setShowBasePlan] = useState(true);
   const [activeBlockId, setActiveBlockId] = useState(null);
   const [activeIsBase, setActiveIsBase] = useState(false);
@@ -242,6 +244,8 @@ export default function App() {
       setBlocks({ distribution: [], pricing: [], promotion: [] });
       setSavedScenarios([]);
       setBaseScenarioOverrides({});
+      setBasePricingSnapshot(null);
+      setBasePromoSnapshot(null);
       setEdited(new Set()); setSearch(""); setCollapsed(new Set()); setErr(null);
     } catch (e) { setErr(e.message || String(e)); }
     finally { setLoading(false); }
@@ -281,6 +285,8 @@ export default function App() {
         setBlocks({ distribution: [], pricing: [], promotion: [] });
         setSavedScenarios([]);
         setBaseScenarioOverrides({});
+        setBasePricingSnapshot(null);
+        setBasePromoSnapshot(null);
       }
       // If engine API is unreachable, the compare tab shows a graceful "no data" state
 
@@ -555,7 +561,8 @@ export default function App() {
   const updateBlockInputs = useCallback((type, blockId, inputs) => {
     if (!blockId || blockId === '__base__') {
       if (type === 'distribution') setBaseRows(inputs);
-      // pricing/promotion have no mutable base state — base data comes from devData
+      else if (type === 'pricing')  setBasePricingSnapshot(inputs);
+      else if (type === 'promotion') setBasePromoSnapshot(inputs);
     } else {
       setBlocks(b => ({
         ...b,
@@ -809,6 +816,8 @@ export default function App() {
             baseRows={baseRows}
             fiscalCalendar={fiscalCalendar}
             basePromoState={planPromos}
+            basePricingSnapshot={basePricingSnapshot}
+            basePromoSnapshot={basePromoSnapshot}
             onNewScenario={() => setView('new-scenario')}
             onDeleteScenario={deleteScenario}
             onUpdateScenario={updateScenario}

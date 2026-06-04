@@ -32,7 +32,7 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months }) {
+function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, basePromoState, basePricingSnapshot, basePromoSnapshot, onDelete, onSaveNew, onOverwrite, onCreatePromoBlock, onSavePromotion, onCreatePricingBlock, onSavePricing, onUpdateScenario, months }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
@@ -350,6 +350,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           fiscalCalendar={fiscalCalendar}
           blocks={blocks.pricing || []}
           initialActiveBlock={pricingBlock}
+          basePricingSnapshot={basePricingSnapshot}
           onSaveNew={handleCreatePricingBlock}
           onOverwrite={handleOverwritePricing}
           onBlockChange={setPendingPricingId}
@@ -358,12 +359,12 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
       {subTab === 'promotion' && (
         <PromotionEditor
           key={scenario.id + '-promo'}
-          initialGrid={promoBlock?.inputs?.grid || basePromoState?.grid || {}}
-          initialPromos={promoBlock?.inputs?.promos || basePromoState?.promos || []}
+          initialGrid={promoBlock?.inputs?.grid || basePromoSnapshot?.grid || basePromoState?.grid || {}}
+          initialPromos={promoBlock?.inputs?.promos || basePromoSnapshot?.promos || basePromoState?.promos || []}
           initialActiveBlock={promoBlock}
           blocks={blocks.promotion || []}
-          baseGrid={basePromoState?.grid || {}}
-          basePromos={basePromoState?.promos || []}
+          baseGrid={basePromoSnapshot?.grid || basePromoState?.grid || {}}
+          basePromos={basePromoSnapshot?.promos || basePromoState?.promos || []}
           rows={baseRows}
           fiscalCalendar={fiscalCalendar}
           onSaveNew={handleCreatePromoBlock}
@@ -427,6 +428,8 @@ export default function ScenariosView({
   baseRows,
   fiscalCalendar = {},
   basePromoState,
+  basePricingSnapshot,
+  basePromoSnapshot,
   onNewScenario,
   onDeleteScenario,
   onUpdateScenario,
@@ -513,6 +516,8 @@ export default function ScenariosView({
         baseRows={baseRows}
         fiscalCalendar={fiscalCalendar}
         basePromoState={basePromoState}
+        basePricingSnapshot={basePricingSnapshot}
+        basePromoSnapshot={basePromoSnapshot}
         onDelete={handleDelete}
         onSaveNew={onCreateDistributionBlock}
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}

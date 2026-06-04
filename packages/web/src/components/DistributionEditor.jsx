@@ -10,7 +10,7 @@ const fmt = {
 
 // ─── Save modal ───────────────────────────────────────────────────────────────
 
-export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose, allowDirectBaseOverwrite = false }) {
+export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose }) {
   const [step, setStep] = useState(activeBlock ? 'choice' : 'name')
   const [name, setName] = useState('')
   const inputRef = useRef(null)
@@ -49,9 +49,7 @@ export function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite
             <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save {typeLabel.toLowerCase()} block</div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {activeBlock?.id === '__base__' && !allowDirectBaseOverwrite
-                ? optBtn(() => onSaveNew(activeBlock.name), `Overwrite "${activeBlock?.name}"`, 'Save current data as a new block', true)
-                : optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
+              {optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
               {optBtn(() => setStep('name'), 'Save as new block', 'Create a new named snapshot')}
             </div>
             <button onClick={onClose} style={{
@@ -394,7 +392,6 @@ export default function DistributionEditor({
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
           onClose={() => setSaveModalOpen(false)}
-          allowDirectBaseOverwrite={true}
         />
       )}
     </>
