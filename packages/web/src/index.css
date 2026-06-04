@@ -125,10 +125,10 @@ table.dap thead th.c-mon { color: var(--ink); }
 /* sticky columns */
 .sticky-l { position: sticky; z-index: 3; background: var(--panel); }
 table.dap thead th.sticky-l { z-index: 7; background: #eaedf0; }
-.c-pg { left: 0; width: 168px; min-width: 168px; max-width: 168px; }
-.c-sku { left: 168px; width: 232px; min-width: 232px; max-width: 232px; box-shadow: 1px 0 0 var(--line-strong); }
+.c-pg { left: 0; width: 220px; min-width: 220px; max-width: 220px; }
+.c-sku { left: 220px; width: 232px; min-width: 232px; max-width: 232px; box-shadow: 1px 0 0 var(--line-strong); }
 thead .c-pg, thead .c-sku { text-align: left; }
-.pg-cell { text-align: left; padding: 0 12px; color: var(--muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; }
+.pg-cell { text-align: left; padding: 0 12px; color: var(--muted); font-size: 12px; white-space: normal; word-break: break-word; }
 .pg-cell.pg-lead { color: var(--ink); font-weight: 600; }
 tr.pg-start td { border-top: 1px solid var(--line-strong); }
 .sku-cell { text-align: left; padding: 0 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; }

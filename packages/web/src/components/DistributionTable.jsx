@@ -57,9 +57,9 @@ export function Cell({ value, display, edited, editing, onStart, onCommit, align
 
 // ─── ApplyPopover ─────────────────────────────────────────────────────────────
 
-export function ApplyPopover({ row, anchor, onApply, onClose }) {
+export function ApplyPopover({ row, anchor, onApply, onClose, months = MONTHS }) {
   const [start, setStart] = useState('')
-  const [end, setEnd] = useState('Dec')
+  const [end, setEnd] = useState(months[months.length - 1])
   const [val, setVal] = useState('')
   const ref = useRef(null)
 
@@ -72,7 +72,7 @@ export function ApplyPopover({ row, anchor, onApply, onClose }) {
   }, [onClose])
 
   useEffect(() => {
-    if (start && MONTHS.indexOf(end) < MONTHS.indexOf(start)) setEnd(start)
+    if (start && months.indexOf(end) < months.indexOf(start)) setEnd(start)
   }, [start]) // eslint-disable-line
 
   const valNum = parseFloat(val)
@@ -89,7 +89,7 @@ export function ApplyPopover({ row, anchor, onApply, onClose }) {
     return { top, left }
   }, [anchor])
 
-  const endOptions = MONTHS.filter((m) => !start || MONTHS.indexOf(m) >= MONTHS.indexOf(start))
+  const endOptions = months.filter((m) => !start || months.indexOf(m) >= months.indexOf(start))
 
   return (
     <div className="pop" ref={ref} style={{ top: pos.top, left: pos.left }}>
@@ -102,7 +102,7 @@ export function ApplyPopover({ row, anchor, onApply, onClose }) {
         <span>Start month</span>
         <select value={start} onChange={(e) => setStart(e.target.value)}>
           <option value="" disabled>Select…</option>
-          {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
+          {months.map((m) => <option key={m} value={m}>{m}</option>)}
         </select>
       </label>
       <label className={'pop-field' + (start ? '' : ' disabled')}>

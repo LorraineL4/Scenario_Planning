@@ -38,3 +38,9 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Brand manual working artifacts (logo extraction scratch files)
+brand manual/pages/
+brand manual/*.png
+brand manual/*.svg
+brand manual/extract_logo.py
