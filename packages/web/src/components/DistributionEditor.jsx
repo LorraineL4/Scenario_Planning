@@ -265,11 +265,18 @@ export default function DistributionEditor({
   }
 
   const handleOverwrite = () => {
-    if (!activeBlock) return
     const snapshot = rows.map(r => ({ ...r, months: { ...r.months } }))
-    onOverwrite?.(activeBlock.id, snapshot)
+    if (activeBlock) {
+      onOverwrite?.(activeBlock.id, snapshot)
+    } else {
+      onSaveNew?.('Base Distribution', snapshot)
+    }
     setSaveModalOpen(false)
   }
+
+  // Present "Base Distribution" as a named block so SaveModal always shows the
+  // choice box — mirrors how the main distribution tab works in App.jsx.
+  const effectiveBlock = activeBlock || { id: '__base__', name: 'Base Distribution' }
 
   const popRow = popover ? rows.find(r => r.id === popover.rowId) : null
 
@@ -374,7 +381,7 @@ export default function DistributionEditor({
 
       {saveModalOpen && (
         <SaveModal
-          activeBlock={activeBlock}
+          activeBlock={effectiveBlock}
           blockType="distribution"
           onOverwrite={handleOverwrite}
           onSaveNew={handleSaveNew}
