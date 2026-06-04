@@ -29,12 +29,14 @@ the API layer can stream it without touching the filesystem.
 """
 import io
 import re
+import time
 import zipfile
 import openpyxl
 from openpyxl.utils import column_index_from_string
 
 # ── Distribution sheet constants (mirror extract_inputs.py) ──────────────────
-_DIST_COL_SKU_NAME   = 2   # B
+_DIST_COL_SKU_NAME   = 2   # B  (may be a HYPERLINK formula with data_only=False)
+_DIST_COL_SKU_TEXT   = 3   # C  (plain-text copy of the SKU name, always readable)
 _DIST_COL_VELOCITY   = 12  # L
 _DIST_COL_ACV_P01    = 16  # P … AA  (P01–P12)
 _DIST_COL_PROB_P01   = 74  # BV … CG (P01–P12)
@@ -119,24 +121,25 @@ def _safe_write(ws, row: int, col: int, value) -> None:
     cell.value = value
 
 
-def _build_sku_row_map(source_bytes: bytes) -> dict[str, int]:
-    """Open with data_only=True so HYPERLINK cells in col B resolve to their
-    display text (the SKU name) rather than the raw formula string."""
-    wb = openpyxl.load_workbook(io.BytesIO(source_bytes), data_only=True)
+def _scan_sku_row_map(ws_dist) -> dict[str, int]:
+    """Build SKU→row map from an already-open Distribution worksheet.
+
+    Col B may contain a HYPERLINK formula (unreadable with data_only=False),
+    so we fall back to col C which always holds the plain-text SKU name.
+    This avoids opening the workbook a second time with data_only=True.
+    """
     result: dict[str, int] = {}
-    if "Distribution" not in wb.sheetnames:
-        return result
-    ws = wb["Distribution"]
-    for row in ws.iter_rows(min_row=_DIST_DATA_START_ROW):
+    for row in ws_dist.iter_rows(min_row=_DIST_DATA_START_ROW):
+        # Try col C (plain text) first; fall back to col B
+        cell_c = row[_DIST_COL_SKU_TEXT - 1]
         cell_b = row[_DIST_COL_SKU_NAME - 1]
-        raw = cell_b.value
+        raw = cell_c.value if isinstance(cell_c.value, str) else cell_b.value
         if not isinstance(raw, str) or not raw.strip():
             continue
         name = raw.strip()
         if any(kw in name.upper() for kw in _DIST_HEADER_KW):
             continue
         result.setdefault(name, cell_b.row)
-    wb.close()
     return result
 
 
@@ -181,15 +184,21 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
         if col_letter:
             period_to_pg_col[p] = column_index_from_string(col_letter)
 
-    # ── Build SKU → Distribution row map via data_only pass ──────────────────
+    t0 = time.time()
     distribution_rows: list = scenario_inputs.get("distribution") or []
-    sku_row_map = _build_sku_row_map(source_bytes) if distribution_rows else {}
 
-    # ── Open workbook for writing (preserves all formulas) ───────────────────
+    # ── Single workbook open (data_only=False preserves all formulas) ─────────
     wb = openpyxl.load_workbook(io.BytesIO(source_bytes), data_only=False)
+    print(f"[write_dap] workbook loaded in {time.time()-t0:.1f}s ({len(source_bytes)//1024}KB, {len(wb.sheetnames)} sheets)")
 
     # Case-insensitive sheet name index
     sheet_index = {name.lower(): name for name in wb.sheetnames}
+
+    # ── Build SKU → row map from col C (plain text, no second open needed) ────
+    sku_row_map: dict[str, int] = {}
+    if distribution_rows and "Distribution" in wb.sheetnames:
+        sku_row_map = _scan_sku_row_map(wb["Distribution"])
+        print(f"[write_dap] SKU row map: {len(sku_row_map)} entries")
 
     # ── 1. Distribution sheet ─────────────────────────────────────────────────
     if distribution_rows and "Distribution" in wb.sheetnames:
@@ -270,6 +279,12 @@ def write_dap(source_bytes: bytes, scenario_inputs: dict) -> bytes:
 
     # ── 4. Finalise and return bytes ──────────────────────────────────────────
     wb.calculation.fullCalcOnLoad = True
+    t1 = time.time()
     out = io.BytesIO()
     wb.save(out)
-    return _strip_calc_chain(out.getvalue())
+    saved_bytes = out.getvalue()
+    print(f"[write_dap] save: {time.time()-t1:.1f}s ({len(saved_bytes)//1024}KB)")
+    t2 = time.time()
+    result = _strip_calc_chain(saved_bytes)
+    print(f"[write_dap] calcChain strip: {time.time()-t2:.1f}s  total: {time.time()-t0:.1f}s")
+    return result
