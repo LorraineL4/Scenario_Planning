@@ -326,7 +326,7 @@ export default function DistributionEditor({
                     onStart={() => setEditing({ rowId: r.id, field: 'unit_velocity' })}
                     onCommit={(v) => commitCell(r.id, 'unit_velocity', v)}
                   />
-                  <td className="cell num r ro acv-cur"><span className="cell-val">{fmt.acv(r.current_ACV)}%</span></td>
+                  <td className="cell num r ro acv-cur"><span className="cell-val">{fmt.acv(r.current_ACV)}</span></td>
                   {MONTHS.map(m => (
                     <Cell
                       key={m} align="r" heat={r.months[m]}
