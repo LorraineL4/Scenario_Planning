@@ -554,7 +554,8 @@ export default function App() {
 
   const updateBlockInputs = useCallback((type, blockId, inputs) => {
     if (!blockId || blockId === '__base__') {
-      setBaseRows(inputs);
+      if (type === 'distribution') setBaseRows(inputs);
+      // pricing/promotion have no mutable base state — base data comes from devData
     } else {
       setBlocks(b => ({
         ...b,

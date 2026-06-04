@@ -316,12 +316,8 @@ export default function PricingView({
   }
 
   const handleOverwrite = () => {
-    if (activeBlock) {
-      onOverwrite?.(activeBlock.id, snapshot())
-    } else {
-      onOverwrite?.('__base__', snapshot())
-      onBlockChange?.('__base__')
-    }
+    if (!activeBlock) return
+    onOverwrite?.(activeBlock.id, snapshot())
     setSaveModalOpen(false)
   }
 
