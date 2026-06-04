@@ -141,9 +141,6 @@ function TopBar({ view, setView, account, onExport, onImportClick }) {
 
       {/* Tab nav */}
       <nav style={{ display: 'flex', gap: 2, marginLeft: 12 }}>
-        {tab('distribution', 'table',   'Distribution')}
-        {tab('pricing',      'sliders', 'Pricing')}
-        {tab('promotion',    'star',    'Promotion')}
         {tab('compare',      'compare', 'Compare')}
         {tab('blocks',       'grid',    'Building Blocks')}
         {tab('scenarios',    'layers',  'Scenarios')}
