@@ -41,7 +41,6 @@ function BasePlanCard({ label, onEdit, onDelete }) {
           </div>
         ))}
       </div>
-      <div style={{ fontSize: 12, color: 'var(--muted)' }}>Original plan</div>
     </div>
   )
 }
@@ -109,7 +108,7 @@ export default function ScenarioListView({ blocks = { distribution: [], pricing:
             {colHeader('Distribution')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {showBasePlan && <BasePlanCard label="Base Distribution" onEdit={onEditBase} onDelete={onDeleteBase} />}
-              {blocks.distribution.map(bl => (
+              {blocks.distribution.filter(b => b.id !== '__base__').map(bl => (
                 <BlockCard
                   key={bl.id}
                   block={bl}
@@ -123,7 +122,7 @@ export default function ScenarioListView({ blocks = { distribution: [], pricing:
             {colHeader('Pricing')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <BasePlanCard label="Base Pricing" />
-              {blocks.pricing?.map(bl => (
+              {blocks.pricing?.filter(b => b.id !== '__base__').map(bl => (
                 <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('pricing', id)} />
               ))}
               {comingSoon}
@@ -133,7 +132,7 @@ export default function ScenarioListView({ blocks = { distribution: [], pricing:
             {colHeader('Promotion')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <BasePlanCard label="Base Promotion" />
-              {blocks.promotion?.map(bl => (
+              {blocks.promotion?.filter(b => b.id !== '__base__').map(bl => (
                 <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('promotion', id)} />
               ))}
               {comingSoon}

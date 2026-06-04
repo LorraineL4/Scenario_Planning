@@ -30,14 +30,13 @@ function blockLabel(id, blocks, type) {
 }
 
 function fetchEnriched(scenario, blocks) {
-  const distBlock = scenario.distributionId && scenario.distributionId !== '__base__'
-    ? (blocks.distribution || []).find(b => b.id === scenario.distributionId)
-    : null
+  const findBlock = (type, id) =>
+    (blocks[type] || []).find(b => b.id === (id || '__base__')) || null
+
+  const distBlock    = findBlock('distribution', scenario.distributionId)
   const rows = distBlock?.inputs || null
 
-  const pricingBlock = scenario.pricingId && scenario.pricingId !== '__base__'
-    ? (blocks.pricing || []).find(b => b.id === scenario.pricingId)
-    : null
+  const pricingBlock = findBlock('pricing', scenario.pricingId)
   const pricingRows = pricingBlock?.inputs
     ? Object.entries(pricingBlock.inputs).map(([skuName, skuData]) => ({
         sku_name: skuName,
@@ -45,9 +44,7 @@ function fetchEnriched(scenario, blocks) {
       }))
     : null
 
-  const promoBlock = scenario.promotionId && scenario.promotionId !== '__base__'
-    ? (blocks.promotion || []).find(b => b.id === scenario.promotionId)
-    : null
+  const promoBlock = findBlock('promotion', scenario.promotionId)
   let promoRows = null
   if (promoBlock) {
     const skuPeriodMap = {}
@@ -58,6 +55,7 @@ function fetchEnriched(scenario, blocks) {
       const period  = cellKey.slice(sepIdx + 3)
       if (!skuPeriodMap[skuName]) skuPeriodMap[skuName] = {}
       skuPeriodMap[skuName][period] = {
+        name: cellData.name,
         promo_price: cellData.promo_price,
         weeks: cellData.weeks,
         scan: cellData.scan,

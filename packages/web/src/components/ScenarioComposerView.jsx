@@ -34,12 +34,6 @@ function BlockOption({ block, selected, onSelect }) {
         }}>
           {block.name}
         </div>
-        {block.isBase && (
-          <span style={{
-            fontSize: 10, fontWeight: 700, letterSpacing: '.04em', textTransform: 'uppercase',
-            color: 'var(--navy)', background: 'var(--navy-50)', padding: '2px 5px', borderRadius: 3, flex: 'none',
-          }}>BASE</span>
-        )}
       </div>
       {block.note && (
         <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 6, paddingLeft: 24 }}>
@@ -87,16 +81,16 @@ export default function ScenarioComposerView({ blocks, existingCount = 0, onSave
   const [promoId, setPromoId] = useState('__base__')
 
   const distOptions = [
-    { id: '__base__', name: 'Base Distribution', note: 'Original plan', isBase: true },
-    ...blocks.distribution,
+    { id: '__base__', name: 'Base Distribution' },
+    ...blocks.distribution.filter(b => b.id !== '__base__'),
   ]
   const pricingOptions = [
-    { id: '__base__', name: 'Base Pricing', note: 'Original plan', isBase: true },
-    ...(blocks.pricing || []),
+    { id: '__base__', name: 'Base Pricing' },
+    ...(blocks.pricing || []).filter(b => b.id !== '__base__'),
   ]
   const promoOptions = [
-    { id: '__base__', name: 'Base Promotion', note: 'Original plan', isBase: true },
-    ...(blocks.promotion || []),
+    { id: '__base__', name: 'Base Promotion' },
+    ...(blocks.promotion || []).filter(b => b.id !== '__base__'),
   ]
 
   const canSave = name.trim().length > 0
