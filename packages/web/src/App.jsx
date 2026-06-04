@@ -541,46 +541,44 @@ export default function App() {
     reader.readAsText(file);
   }, []);
 
-  const writebackInputRef = useRef(null);
-  const writebackCtxRef   = useRef(null);
-
   const handleWriteToExcel = useCallback((scenario, scenarioInputs) => {
-    writebackCtxRef.current = { scenario, scenarioInputs };
-    writebackInputRef.current?.click();
-  }, []);
-
-  const handleWritebackFile = useCallback(async (e) => {
-    const file = e.target.files[0];
-    e.target.value = '';
-    if (!file || !writebackCtxRef.current) return;
-    const { scenario, scenarioInputs } = writebackCtxRef.current;
-    writebackCtxRef.current = null;
-
-    const form = new FormData();
-    form.append('file', file);
-    form.append('scenario_inputs', JSON.stringify({
-      ...scenarioInputs,
-      scenario_name: scenario.name || 'scenario',
-    }));
-
-    try {
-      const res = await fetch('/api/writeback', { method: 'POST', body: form });
-      if (!res.ok) {
-        const msg = await res.text().catch(() => res.statusText);
-        alert(`Write-back failed: ${msg}`);
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx';
+    input.onchange = async (e) => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const form = new FormData();
+      form.append('file', file);
+      try {
+        form.append('scenario_inputs', JSON.stringify({
+          ...scenarioInputs,
+          scenario_name: scenario.name || 'scenario',
+        }));
+      } catch (err) {
+        alert(`Failed to serialize scenario data: ${err.message}`);
         return;
       }
-      const blob = await res.blob();
-      const disp = res.headers.get('content-disposition') || '';
-      const match = disp.match(/filename="?([^"]+)"?/);
-      const filename = match ? match[1] : `${file.name.replace(/\.xlsx$/i, '')}-${scenario.name}.xlsx`;
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = filename; a.click();
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert(`Write-back failed: ${err.message}`);
-    }
+      try {
+        const res = await fetch('/api/writeback', { method: 'POST', body: form });
+        if (!res.ok) {
+          const msg = await res.text().catch(() => res.statusText);
+          alert(`Write-back failed: ${msg}`);
+          return;
+        }
+        const blob = await res.blob();
+        const disp = res.headers.get('content-disposition') || '';
+        const match = disp.match(/filename="?([^"]+)"?/);
+        const filename = match ? match[1] : `${file.name.replace(/\.xlsx$/i, '')}-${scenario.name}.xlsx`;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        URL.revokeObjectURL(url);
+      } catch (err) {
+        alert(`Write-back failed: ${err.message}`);
+      }
+    };
+    input.click();
   }, []);
 
   const handleComposeSave = useCallback(({ name, tag, distributionId, pricingId, promotionId }) => {
@@ -715,7 +713,6 @@ export default function App() {
     <div className={"app" + (dragging ? " drag" : "")}>
       <TopBar view={view} setView={setView} account={devData?.account} onExport={handleExport} onImportClick={() => importRef.current?.click()} />
       <input ref={importRef} type="file" accept=".json" hidden onChange={handleImportFile} />
-      <input ref={writebackInputRef} type="file" accept=".xlsx" hidden onChange={handleWritebackFile} />
       <ContextBar account={devData?.account} skuCount={skuCount} />
 
       {/* ── Distribution tab ── */}
