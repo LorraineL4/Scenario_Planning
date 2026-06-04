@@ -38,7 +38,7 @@ class Config:
 class ScenarioInputs:
     """Entered per scenario, per period."""
     # Distribution
-    acv_pct: float              # % store coverage → TDP = acv_pct × number_of_stores
+    acv_pct: float              # raw % store coverage (from Distribution sheet)
     velocity: float             # units per store per week
     slotting: float             # lump sum for this period
 
@@ -85,6 +85,9 @@ class ScenarioInputs:
     # Cost
     cogs: float
 
+    # Probability-weighted ACV (chained via prob[p]). Used for TDP when set; falls back to acv_pct.
+    effective_acv_pct: Optional[float] = None
+
     # Pre-computed SUMPRODUCT baseline for PGs with multiple items in the Distribution sheet.
     # If set, bypasses velocity × TDP and uses this value directly as dist_baseline.
     dist_baseline_override: Optional[float] = None
@@ -97,12 +100,9 @@ class ScenarioInputs:
 def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     """Run the DAP model for one SKU, one period. Returns a flat dict of outputs."""
 
-    # --- 1. Distribution baseline ---
-    tdp = inp.acv_pct * cfg.number_of_stores
-    if inp.dist_baseline_override is not None:
-        dist_baseline = inp.dist_baseline_override
-    else:
-        dist_baseline = inp.velocity * tdp      # weekly units for whole account
+    # --- 1. TDP — use probability-weighted ACV when available ---
+    acv_for_tdp = inp.effective_acv_pct if inp.effective_acv_pct is not None else inp.acv_pct
+    tdp = acv_for_tdp * cfg.number_of_stores
 
     # --- 2. Price elasticity impact ---
     if inp.price_impact_manual is not None:
@@ -110,15 +110,18 @@ def run_engine(cfg: Config, inp: ScenarioInputs) -> dict:
     else:
         price_elasticity_impact = (inp.base_price / cfg.current_base_price) ** cfg.constant_elasticity - 1
 
-    # --- 3. Baseline (weekly, full adjustments) ---
+    # --- 3. Distribution baseline (includes price impact) ---
+    raw_dist = inp.dist_baseline_override if inp.dist_baseline_override is not None else inp.velocity * tdp
+    dist_baseline = raw_dist * (1 + price_elasticity_impact)
+
+    # --- 4. Baseline (weekly, seasonality + misc adjustments) ---
     baseline = (
         dist_baseline
-        * (1 + price_elasticity_impact)
         * (1 + inp.misc_impact_pct)
         * cfg.seasonality_index
     )
 
-    # --- 4. Volume ---
+    # --- 5. Volume ---
     weeks_non_promo = cfg.weeks_in_period - inp.weeks_event_promo1 - inp.weeks_event_promo2
 
     promo_units_1 = inp.weeks_event_promo1 * baseline * (1 + inp.lift_promo1)

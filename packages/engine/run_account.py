@@ -110,6 +110,7 @@ def _build_config(cfg_data: dict, inp_data: dict, sku: str, period: str) -> Conf
 def _build_inputs(
     cfg_data: dict, inp_data: dict, sku: str, period: str, slotting: float,
     dist_baseline_override: float = None,
+    effective_acv_pct: float = None,
 ) -> ScenarioInputs:
     p      = inp_data["skus"][sku]["periods"][period]
     static = cfg_data["skus"][sku]["static_inputs"]
@@ -124,6 +125,7 @@ def _build_inputs(
         acv_pct               = f(p["acv_pct"]),
         velocity              = f(inp_data["skus"][sku]["velocity"]),
         slotting              = slotting,
+        effective_acv_pct     = effective_acv_pct,
 
         base_price            = f(p["base_price"]),
         gross_price           = f(p["gross_price"]),
@@ -193,6 +195,7 @@ def _aggregate(outputs: list) -> dict:
 def run_sku(cfg_data: dict, inp_data: dict, sku: str) -> dict:
     sku_inp   = inp_data["skus"][sku]
     stores    = inp_data["account"]["number_of_stores"]
+    velocity  = sku_inp.get("velocity") or 0.0
     eff_vel   = sku_inp.get("effective_velocity_by_period", {})
 
     acv_by_period  = {p: sku_inp["periods"][p].get("acv_pct") for p in PERIODS}
@@ -201,9 +204,12 @@ def run_sku(cfg_data: dict, inp_data: dict, sku: str) -> dict:
     period_outputs = {}
     for p in PERIODS:
         cfg = _build_config(cfg_data, inp_data, sku, p)
-        # Use pre-computed SUMPRODUCT baseline when available (multi-item PGs)
-        override = eff_vel[p] * stores if eff_vel.get(p) is not None else None
-        inp = _build_inputs(cfg_data, inp_data, sku, p, slotting_alloc[p], override)
+        eff_vel_p = eff_vel.get(p)
+        # Probability-weighted ACV: derived from effective_velocity / velocity (single-item exact; multi-item approx)
+        eff_acv   = (eff_vel_p / velocity) if (eff_vel_p is not None and velocity) else None
+        # Pre-computed SUMPRODUCT baseline when available (multi-item PGs)
+        override  = eff_vel_p * stores if eff_vel_p is not None else None
+        inp = _build_inputs(cfg_data, inp_data, sku, p, slotting_alloc[p], override, eff_acv)
         period_outputs[p] = run_engine(cfg, inp)
 
     return {
