@@ -87,13 +87,15 @@ function BlockCard({ block, onDelete, onEdit }) {
 const colHeader = (label) => (
   <div style={{ fontWeight: 700, fontSize: 13, color: 'var(--ink-2)', marginBottom: 10, letterSpacing: '.02em' }}>{label}</div>
 )
-const comingSoon = (
-  <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', paddingLeft: 2, marginTop: 4 }}>
-    Editor coming soon
-  </div>
-)
 
-export default function ScenarioListView({ blocks = { distribution: [], pricing: [], promotion: [] }, showBasePlan = true, onDeleteBlock, onEditBlock, onEditBase, onDeleteBase }) {
+export default function ScenarioListView({
+  blocks = { distribution: [], pricing: [], promotion: [] },
+  showBasePlan = true,
+  onDeleteBlock,
+  onEditBlock, onEditBase, onDeleteBase,
+  onEditPricingBase, onEditPricingBlock,
+  onEditPromotionBase, onEditPromotionBlock,
+}) {
   return (
     <div className="fade-in" style={{ padding: 'var(--gut)', maxWidth: 1320, margin: '0 auto' }}>
       <div style={{ marginBottom: 36 }}>
@@ -121,21 +123,29 @@ export default function ScenarioListView({ blocks = { distribution: [], pricing:
           <div>
             {colHeader('Pricing')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <BasePlanCard label="Base Pricing" />
+              <BasePlanCard label="Base Pricing" onEdit={onEditPricingBase} />
               {blocks.pricing?.filter(b => b.id !== '__base__').map(bl => (
-                <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('pricing', id)} />
+                <BlockCard
+                  key={bl.id}
+                  block={bl}
+                  onDelete={(id) => onDeleteBlock?.('pricing', id)}
+                  onEdit={(block) => onEditPricingBlock?.(block)}
+                />
               ))}
-              {comingSoon}
             </div>
           </div>
           <div>
             {colHeader('Promotion')}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <BasePlanCard label="Base Promotion" />
+              <BasePlanCard label="Base Promotion" onEdit={onEditPromotionBase} />
               {blocks.promotion?.filter(b => b.id !== '__base__').map(bl => (
-                <BlockCard key={bl.id} block={bl} onDelete={(id) => onDeleteBlock?.('promotion', id)} />
+                <BlockCard
+                  key={bl.id}
+                  block={bl}
+                  onDelete={(id) => onDeleteBlock?.('promotion', id)}
+                  onEdit={(block) => onEditPromotionBlock?.(block)}
+                />
               ))}
-              {comingSoon}
             </div>
           </div>
         </div>

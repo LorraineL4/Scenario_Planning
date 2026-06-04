@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { tagColor, Dot, Icon } from './ui.jsx'
 import DistributionEditor from './DistributionEditor.jsx'
-import PromotionEditor from './PromotionEditor.jsx'
+import PromotionView from './PromotionView.jsx'
 import PricingView from './PricingView.jsx'
 
 const fmt$ = (v) => v == null ? '—' : `$${Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 })}`
@@ -387,7 +387,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
         />
       )}
       {subTab === 'promotion' && (
-        <PromotionEditor
+        <PromotionView
           key={scenario.id + '-promo'}
           initialGrid={promoBlock?.inputs?.grid || {}}
           initialPromos={promoBlock?.inputs?.promos || []}
