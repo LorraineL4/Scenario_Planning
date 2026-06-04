@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { parseDAP } from './dap-xlsx.js';
 import CompareView from './components/CompareView.jsx';
 import ScenarioListView from './components/ScenarioListView.jsx';
 import ScenariosView from './components/ScenariosView.jsx';
@@ -334,11 +335,9 @@ export default function App() {
     if (!file) return;
     setLoading(true); setErr(null);
     try {
+      const buf = await file.arrayBuffer();
       const fd = new FormData();
       fd.append('file', file);
-      const r = await fetch('/api/extract', { method: 'POST', body: fd });
-      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
-      const data = await r.json();
 
       const [parsedResult, engineResult] = await Promise.allSettled([
         parseDAP(buf),
