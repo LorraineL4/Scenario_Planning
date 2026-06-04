@@ -176,11 +176,14 @@ export default function DistributionEditor({
   onSaveNew,
   onOverwrite,
   onBlockChange,
+  onDraftChange,
   months = MONTHS,
 }) {
   const [rows, setRows] = useState(() =>
     (initialRows || []).map(r => ({ ...r, months: { ...r.months } }))
   )
+
+  useEffect(() => { onDraftChange?.(rows) }, [rows]) // eslint-disable-line
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock)
   const [editing, setEditing]   = useState(null)
   const [edited, setEdited]     = useState(() => new Set())

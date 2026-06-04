@@ -48,20 +48,25 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   const [computing, setComputing] = useState(false)
   const [computeError, setComputeError] = useState(false)
   const [blockRevision, setBlockRevision] = useState(0)
+  const [draftDistRows, setDraftDistRows] = useState(null)
+  const [draftPricingData, setDraftPricingData] = useState(null)
+  const [draftPromoData, setDraftPromoData] = useState(null)
 
   useEffect(() => {
     if (!scenario) return
 
+    // Prefer live draft rows from the editor; fall back to saved block data
     const distBlock = pendingDistId && pendingDistId !== '__base__'
       ? (blocks.distribution || []).find(b => b.id === pendingDistId) || null
       : null
-    const rows = distBlock?.inputs || null
+    const rows = draftDistRows ?? distBlock?.inputs ?? null
 
     const pricingBlock = pendingPricingId && pendingPricingId !== '__base__'
       ? (blocks.pricing || []).find(b => b.id === pendingPricingId) || null
       : null
-    const pricingRows = pricingBlock?.inputs
-      ? Object.entries(pricingBlock.inputs).map(([skuName, skuData]) => ({
+    const pricingSource = draftPricingData ?? pricingBlock?.inputs ?? null
+    const pricingRows = pricingSource
+      ? Object.entries(pricingSource).map(([skuName, skuData]) => ({
           sku_name: skuName,
           periods: skuData.periods || {},
         }))
@@ -70,10 +75,11 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
     const promoBlock = pendingPromoId && pendingPromoId !== '__base__'
       ? (blocks.promotion || []).find(b => b.id === pendingPromoId) || null
       : null
+    const promoSource = draftPromoData ?? promoBlock?.inputs ?? null
     let promoRows = null
-    if (promoBlock) {
+    if (promoSource) {
       const skuPeriodMap = {}
-      for (const [cellKey, cellData] of Object.entries(promoBlock.inputs?.grid || {})) {
+      for (const [cellKey, cellData] of Object.entries(promoSource.grid || {})) {
         const sepIdx = cellKey.indexOf('|||')
         if (sepIdx < 0) continue
         const skuName = cellKey.slice(0, sepIdx)
@@ -93,27 +99,32 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
       }))
     }
 
-    setComputing(true)
     setComputeError(false)
-    fetch('/api/compute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        distribution_rows: rows ? rows.map(r => ({
-          SKU_name: r.SKU_name,
-          unit_velocity: r.unit_velocity,
-          months: r.months,
-          dist_prob: r.dist_prob,
-        })) : null,
-        pricing_rows: pricingRows,
-        promo_rows: promoRows,
-      }),
-    })
-      .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
-      .then(data => { setComputedFinancials(data); setComputeError(false) })
-      .catch(() => setComputeError(true))
-      .finally(() => setComputing(false))
-  }, [pendingDistId, pendingPricingId, pendingPromoId, blockRevision])  // eslint-disable-line
+
+    const timer = setTimeout(() => {
+      setComputing(true)
+      fetch('/api/compute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          distribution_rows: rows ? rows.map(r => ({
+            SKU_name: r.SKU_name,
+            unit_velocity: r.unit_velocity,
+            months: r.months,
+            dist_prob: r.dist_prob,
+          })) : null,
+          pricing_rows: pricingRows,
+          promo_rows: promoRows,
+        }),
+      })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+        .then(data => { setComputedFinancials(data); setComputeError(false) })
+        .catch(() => setComputeError(true))
+        .finally(() => setComputing(false))
+    }, 400)
+
+    return () => clearTimeout(timer)
+  }, [pendingDistId, pendingPricingId, pendingPromoId, blockRevision, draftDistRows, draftPricingData, draftPromoData])  // eslint-disable-line
 
   const isDistDirty    = pendingDistId    !== savedDistId
   const isPromoDirty   = pendingPromoId   !== savedPromoId
@@ -371,6 +382,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           onSaveNew={handleCreateDistBlock}
           onOverwrite={handleOverwriteDist}
           onBlockChange={setPendingDistId}
+          onDraftChange={setDraftDistRows}
           months={months}
         />
       )}
@@ -385,6 +397,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           onSaveNew={handleCreatePricingBlock}
           onOverwrite={handleOverwritePricing}
           onBlockChange={setPendingPricingId}
+          onDraftChange={setDraftPricingData}
         />
       )}
       {subTab === 'promotion' && (
@@ -401,6 +414,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           onSaveNew={handleCreatePromoBlock}
           onOverwrite={handleOverwritePromo}
           onBlockChange={setPendingPromoId}
+          onDraftChange={setDraftPromoData}
         />
       )}
     </div>

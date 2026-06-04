@@ -130,6 +130,7 @@ export default function PromotionEditor({
   onSaveNew,
   onOverwrite,
   onBlockChange,
+  onDraftChange,
 }) {
   const productGroups = (() => {
     if (!rows?.length) return []
@@ -147,6 +148,8 @@ export default function PromotionEditor({
   const [grid, setGrid]               = useState(() => ({ ...(initialGrid || {}) }))
   const [activeBlock, setActiveBlock] = useState(initialActiveBlock || null)
   const [saveModalOpen, setSaveModalOpen] = useState(false)
+
+  useEffect(() => { onDraftChange?.({ grid, promos }) }, [grid, promos]) // eslint-disable-line
 
   const [selectedCells, setSelectedCells] = useState(new Set())
   const [formOpen, setFormOpen]           = useState(false)

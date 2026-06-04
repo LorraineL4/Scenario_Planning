@@ -194,11 +194,14 @@ export default function PricingView({
   onSaveNew,
   onOverwrite,
   onBlockChange,
+  onDraftChange,
 }) {
   const periods    = useMemo(() => Object.keys(fiscalCalendar), [fiscalCalendar])
   const allCols    = useMemo(() => periods, [periods])
 
   const [pricingData, setPricingData] = useState({})
+
+  useEffect(() => { onDraftChange?.(pricingData) }, [pricingData]) // eslint-disable-line
   const [collapsed,   setCollapsed]   = useState(() => new Set())
   const [editing,     setEditing]     = useState(null)   // { sku, field, period }
   const [edited,      setEdited]      = useState(() => new Set())
