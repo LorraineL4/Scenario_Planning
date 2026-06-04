@@ -5,6 +5,8 @@ import ScenarioListView from './components/ScenarioListView.jsx';
 import ScenariosView from './components/ScenariosView.jsx';
 import ScenarioComposerView from './components/ScenarioComposerView.jsx';
 import { Icon } from './components/ui.jsx';
+import { MONTHS, heatColor, isDarkFill, clampACV, Cell, ApplyPopover } from './components/DistributionTable.jsx';
+import { PlanDropdown, SaveModal } from './components/DistributionEditor.jsx';
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
@@ -87,297 +89,11 @@ function buildBaseScenario(devData) {
   }
 }
 
-const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-
 const fmt = {
   vel:  (n) => (Number(n) || 0).toFixed(2),
   acv:  (n) => Math.round(Number(n) || 0).toString(),
   prob: (n) => Math.round(Number(n) || 0) + "%",
 };
-const clampACV = (n) => Math.max(0, Math.min(100, Math.round(Number(n) || 0)));
-
-const lerp = (a, b, t) => a + (b - a) * t;
-function heatColor(v) {
-  v = Math.max(0, Math.min(100, Number(v) || 0));
-  const red = [247, 64, 58], white = [255, 255, 255], navy = [22, 87, 136];
-  let c;
-  if (v <= 50) { const t = v / 50; c = red.map((x, i) => lerp(x, white[i], t)); }
-  else { const t = (v - 50) / 50; c = white.map((x, i) => lerp(x, navy[i], t)); }
-  return c.map(Math.round);
-}
-const isDarkFill = ([r, g, b]) => (r * 299 + g * 587 + b * 114) / 1000 < 150;
-
-// ─── Editable table cell ────────────────────────────────────────────────────
-
-function Cell({ value, display, edited, editing, onStart, onCommit, align, heat, readOnly, suffix }) {
-  const inputRef = useRef(null);
-  useEffect(() => { if (editing && inputRef.current) { inputRef.current.focus(); inputRef.current.select(); } }, [editing]);
-  const style = {};
-  if (heat != null) {
-    const rgb = heatColor(heat);
-    style.background = `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})`;
-    if (!edited) style.color = isDarkFill(rgb) ? "#ffffff" : "var(--ink)";
-  }
-  const cls = "cell num" + (align ? " " + align : "") + (edited ? " edited" : "") + (readOnly ? " ro" : "");
-  if (editing) {
-    return (
-      <td className={cls} style={style}>
-        <input
-          ref={inputRef}
-          className="cell-input"
-          defaultValue={value}
-          inputMode="decimal"
-          onBlur={(e) => onCommit(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") { e.preventDefault(); onCommit(e.target.value); }
-            else if (e.key === "Escape") { e.preventDefault(); onCommit(null); }
-          }}
-        />
-      </td>
-    );
-  }
-  return (
-    <td className={cls} style={style} onClick={readOnly ? undefined : onStart} title={readOnly ? "" : "Click to edit"}>
-      <span className="cell-val">{display}{suffix || ""}</span>
-    </td>
-  );
-}
-
-// ─── ACV range popover ──────────────────────────────────────────────────────
-
-function ApplyPopover({ row, anchor, onApply, onClose }) {
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("Dec");
-  const [val, setVal] = useState("");
-  const ref = useRef(null);
-
-  useEffect(() => {
-    function onDoc(e) { if (ref.current && !ref.current.contains(e.target)) onClose(); }
-    function onKey(e) { if (e.key === "Escape") onClose(); }
-    document.addEventListener("mousedown", onDoc);
-    document.addEventListener("keydown", onKey);
-    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
-  }, [onClose]);
-
-  useEffect(() => {
-    if (start && MONTHS.indexOf(end) < MONTHS.indexOf(start)) setEnd(start);
-  }, [start]); // eslint-disable-line
-
-  const valNum = parseFloat(val);
-  const valid = start && !isNaN(valNum) && valNum >= 0 && valNum <= 100;
-
-  const pos = useMemo(() => {
-    if (!anchor) return { top: 80, left: 80 };
-    const W = 268, H = 250, m = 8;
-    let left = anchor.left - W - 10;
-    if (left < m) left = anchor.right + 10;
-    let top = anchor.top;
-    if (top + H > window.innerHeight - m) top = window.innerHeight - H - m;
-    if (top < m) top = m;
-    return { top, left };
-  }, [anchor]);
-
-  const endOptions = MONTHS.filter((m) => !start || MONTHS.indexOf(m) >= MONTHS.indexOf(start));
-
-  return (
-    <div className="pop" ref={ref} style={{ top: pos.top, left: pos.left }}>
-      <div className="pop-head">
-        <div className="pop-title">Adjust ACV range</div>
-        <button className="pop-x" onClick={onClose} aria-label="Close">✕</button>
-      </div>
-      <div className="pop-sku">{row.SKU_name}</div>
-      <label className="pop-field">
-        <span>Start month</span>
-        <select value={start} onChange={(e) => setStart(e.target.value)}>
-          <option value="" disabled>Select…</option>
-          {MONTHS.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </label>
-      <label className={"pop-field" + (start ? "" : " disabled")}>
-        <span>End month</span>
-        <select value={end} disabled={!start} onChange={(e) => setEnd(e.target.value)}>
-          {endOptions.map((m) => <option key={m} value={m}>{m}</option>)}
-        </select>
-      </label>
-      <label className="pop-field">
-        <span>ACV value (0–100)</span>
-        <input
-          type="number" min="0" max="100" step="1" value={val}
-          placeholder="e.g. 45"
-          onChange={(e) => setVal(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && valid) onApply(start, end, clampACV(valNum)); }}
-        />
-      </label>
-      <button className="pop-apply" disabled={!valid} onClick={() => onApply(start, end, clampACV(valNum))}>
-        Apply {start ? `${start}–${end}` : ""}
-      </button>
-    </div>
-  );
-}
-
-// ─── Save plan modal ────────────────────────────────────────────────────────
-
-function SaveModal({ activeBlock, blockType = 'distribution', onOverwrite, onSaveNew, onClose }) {
-  const [step, setStep] = useState(activeBlock ? 'choice' : 'name');
-  const [name, setName] = useState('');
-  const inputRef = useRef(null);
-  const typeLabel = blockType.charAt(0).toUpperCase() + blockType.slice(1);
-
-  useEffect(() => {
-    if (step === 'name') inputRef.current?.focus();
-  }, [step]);
-
-  useEffect(() => {
-    const handler = (e) => { if (e.key === 'Escape') onClose(); };
-    document.addEventListener('keydown', handler);
-    return () => document.removeEventListener('keydown', handler);
-  }, [onClose]);
-
-  const optBtn = (onClick, title, sub, primary) => (
-    <button onClick={onClick} style={{
-      padding: '12px 16px', borderRadius: 10, border: '1px solid var(--line)',
-      background: primary ? 'var(--navy)' : 'var(--panel)',
-      color: primary ? '#fff' : 'var(--ink)',
-      fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left', width: '100%',
-    }}>
-      <div>{title}</div>
-      <div style={{ fontSize: 12, fontWeight: 500, marginTop: 3, opacity: primary ? 0.8 : 1, color: primary ? 'inherit' : 'var(--muted)' }}>{sub}</div>
-    </button>
-  );
-
-  return (
-    <div
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      style={{
-        position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 200,
-      }}
-    >
-      <div style={{ background: 'var(--panel)', borderRadius: 14, padding: '28px 28px 24px', width: 380, boxShadow: '0 8px 40px rgba(0,0,0,.2)' }}>
-        {step === 'choice' ? (
-          <>
-            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save {typeLabel.toLowerCase()} block</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 20 }}>What would you like to do?</div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {optBtn(onOverwrite, `Overwrite "${activeBlock?.name}"`, 'Replace the saved block with current values', true)}
-              {optBtn(() => setStep('name'), 'Save as new block', 'Create a new named snapshot')}
-            </div>
-            <button onClick={onClose} style={{
-              marginTop: 14, width: '100%', padding: '8px', borderRadius: 8, border: 'none',
-              background: 'transparent', color: 'var(--muted)', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-            }}>Cancel</button>
-          </>
-        ) : (
-          <>
-            <div style={{ fontWeight: 800, fontSize: 16, color: 'var(--ink)', marginBottom: 6 }}>Save as new block</div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 18 }}>Give this {typeLabel.toLowerCase()} snapshot a name.</div>
-            <input
-              ref={inputRef}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter' && name.trim()) onSaveNew(name.trim()); }}
-              placeholder="e.g. Conservative, High growth…"
-              style={{
-                width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid var(--line)',
-                fontSize: 14, fontFamily: 'inherit', color: 'var(--ink)',
-                background: 'var(--panel-2)', boxSizing: 'border-box', marginBottom: 16,
-                outline: 'none',
-              }}
-            />
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
-              <button onClick={onClose} style={{
-                padding: '8px 16px', borderRadius: 8, border: '1px solid var(--line)',
-                background: 'var(--panel)', color: 'var(--ink-2)', fontWeight: 600, fontSize: 13,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}>Cancel</button>
-              <button
-                onClick={() => name.trim() && onSaveNew(name.trim())}
-                disabled={!name.trim()}
-                style={{
-                  padding: '8px 16px', borderRadius: 8, border: 'none',
-                  background: 'var(--navy)', color: '#fff', fontWeight: 700, fontSize: 13,
-                  cursor: name.trim() ? 'pointer' : 'not-allowed',
-                  opacity: name.trim() ? 1 : 0.45, fontFamily: 'inherit',
-                }}>Save</button>
-            </div>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Plan selector dropdown ─────────────────────────────────────────────────
-
-function PlanDropdown({ activeBlock, blocks, onSelectBase, onSelectBlock }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef(null);
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
-
-  const label = activeBlock ? activeBlock.name : 'Base Distribution';
-  const btnStyle = {
-    display: 'inline-flex', alignItems: 'center', gap: 6, padding: '5px 10px',
-    borderRadius: 7, border: '1px solid var(--line)',
-    background: activeBlock ? 'var(--navy-50)' : 'var(--panel)',
-    color: activeBlock ? 'var(--navy)' : 'var(--ink-2)',
-    fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit',
-    maxWidth: 240,
-  };
-  const itemStyle = (active) => ({
-    display: 'flex', alignItems: 'center', width: '100%',
-    padding: '8px 12px', borderRadius: 7, border: 'none',
-    background: active ? 'var(--navy-50)' : 'transparent',
-    color: active ? 'var(--navy)' : 'var(--ink)',
-    fontWeight: active ? 700 : 500, fontSize: 13,
-    cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
-  });
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button onClick={() => setOpen(o => !o)} style={btnStyle}>
-        <Icon name="table" size={13} />
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-        <Icon name="arrowDn" size={12} style={{ flex: 'none' }} />
-      </button>
-      {open && (
-        <div style={{
-          position: 'absolute', top: '100%', left: 0, marginTop: 4,
-          background: 'var(--panel)', border: '1px solid var(--line)',
-          borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,.12)', zIndex: 100,
-          minWidth: 220, overflow: 'hidden',
-        }}>
-          <div style={{ padding: '6px 4px' }}>
-            <button onClick={() => { onSelectBase(); setOpen(false); }} style={itemStyle(!activeBlock)}>
-              <span style={{ flex: 1 }}>Base Distribution</span>
-              {!activeBlock && <span style={{ fontSize: 11, fontWeight: 700 }}>current</span>}
-            </button>
-            {blocks.length > 0 && (
-              <>
-                <div style={{ height: 1, background: 'var(--line)', margin: '4px 8px' }} />
-                {blocks.map(bl => (
-                  <button key={bl.id} onClick={() => { onSelectBlock(bl); setOpen(false); }} style={itemStyle(activeBlock?.id === bl.id)}>
-                    <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{bl.name}</span>
-                    {activeBlock?.id === bl.id && <span style={{ fontSize: 11, fontWeight: 700, flex: 'none' }}>current</span>}
-                  </button>
-                ))}
-              </>
-            )}
-            {blocks.length === 0 && (
-              <div style={{ padding: '4px 12px 8px', fontSize: 12, color: 'var(--muted)' }}>
-                No saved blocks yet
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
 
 // ─── App shell ─────────────────────────────────────────────────────────────
 
@@ -776,6 +492,32 @@ export default function App() {
     setSavedScenarios(ss => ss.filter(s => s.id !== id));
   }, []);
 
+  const updateScenario = useCallback((id, updates) => {
+    setSavedScenarios(ss => ss.map(s => s.id === id ? { ...s, ...updates } : s));
+  }, []);
+
+  const updateBlockInputs = useCallback((type, blockId, inputs) => {
+    if (!blockId || blockId === '__base__') {
+      setBaseRows(inputs);
+    } else {
+      setBlocks(b => ({
+        ...b,
+        [type]: b[type].map(bl => bl.id === blockId ? { ...bl, inputs } : bl),
+      }));
+    }
+  }, []);
+
+  const createDistributionBlock = useCallback((name, rows) => {
+    const newBlock = {
+      id: `dist-${Date.now()}`,
+      name,
+      note: `${rows.length} SKUs · saved`,
+      created_at: new Date().toISOString(),
+      inputs: rows.map(r => ({ ...r, months: { ...r.months } })),
+    };
+    setBlocks(b => ({ ...b, distribution: [...b.distribution, newBlock] }));
+  }, []);
+
   useEffect(() => {
     const acctKey = devData?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
     if (!acctKey) return;
@@ -961,13 +703,17 @@ export default function App() {
 
       {/* ── Scenarios tab ── */}
       {view === 'scenarios' && (
-        <div style={{ flex: 1, overflowY: 'auto' }}>
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex' }}>
           <ScenariosView
             scenarios={scenarios}
             savedScenarios={savedScenarios}
             blocks={blocks}
+            baseRows={baseRows}
             onNewScenario={() => setView('new-scenario')}
             onDeleteScenario={deleteScenario}
+            onUpdateScenario={updateScenario}
+            onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
+            onCreateDistributionBlock={createDistributionBlock}
           />
         </div>
       )}
