@@ -30,7 +30,7 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario }) {
+function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario, onWriteToDAP }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
@@ -123,6 +123,18 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
             )}
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20, flexShrink: 0 }}>
+            <button
+              onClick={() => onWriteToDAP?.(scenario, initialRows)}
+              style={{
+                fontSize: 13, fontWeight: 600, padding: '6px 14px', borderRadius: 7,
+                border: '1px solid var(--line-strong)', background: 'var(--panel)',
+                color: 'var(--ink-2)', cursor: 'pointer', fontFamily: 'inherit',
+                display: 'flex', alignItems: 'center', gap: 6, transition: 'all .12s',
+              }}
+              title="Write this scenario's inputs back to a DAP workbook"
+            >
+              Write to DAP
+            </button>
             {!isBase && (
               confirming ? (
                 <div style={{ display: 'flex', gap: 6 }}>
@@ -272,6 +284,7 @@ export default function ScenariosView({
   onUpdateScenario,
   onSaveDistribution,
   onCreateDistributionBlock,
+  onWriteToDAP,
 }) {
   const allItems = [
     ...scenarios.map(s => ({ ...s, _isBase: true })),
@@ -349,6 +362,7 @@ export default function ScenariosView({
         onSaveNew={onCreateDistributionBlock}
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}
         onUpdateScenario={onUpdateScenario}
+        onWriteToDAP={onWriteToDAP}
       />
     </div>
   )

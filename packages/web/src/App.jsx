@@ -510,6 +510,63 @@ export default function App() {
     reader.readAsText(file);
   }, []);
 
+  const writeDapInputRef = useRef(null);
+  const writeDapCtxRef   = useRef(null);   // holds {scenario, distributionRows} while picker is open
+
+  const handleWriteToDAP = useCallback((scenario, distributionRows) => {
+    writeDapCtxRef.current = { scenario, distributionRows };
+    writeDapInputRef.current?.click();
+  }, []);
+
+  const handleWriteDAPFile = useCallback(async (e) => {
+    const file = e.target.files[0];
+    e.target.value = '';
+    if (!file || !writeDapCtxRef.current) return;
+
+    const { scenario, distributionRows } = writeDapCtxRef.current;
+    writeDapCtxRef.current = null;
+
+    const promoState = (() => {
+      try { return JSON.parse(localStorage.getItem(`promo-state-${acctKey}`) || 'null') || {}; }
+      catch { return {}; }
+    })();
+
+    const payload = {
+      scenario_name:     scenario.name || 'scenario',
+      distribution_rows: (distributionRows || []).map(r => ({
+        SKU_name:      r.SKU_name,
+        unit_velocity: r.unit_velocity,
+        months:        r.months,
+        dist_prob:     r.dist_prob,
+      })),
+      promo_grid:      promoState.grid || {},
+      fiscal_calendar: fiscalCalendar,
+    };
+
+    const form = new FormData();
+    form.append('file', file);
+    form.append('payload', JSON.stringify(payload));
+
+    try {
+      const res = await fetch('/api/write-dap', { method: 'POST', body: form });
+      if (!res.ok) {
+        const msg = await res.text().catch(() => res.statusText);
+        alert(`Write to DAP failed: ${msg}`);
+        return;
+      }
+      const blob = await res.blob();
+      const disposition = res.headers.get('content-disposition') || '';
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      const filename = match ? match[1] : `${file.name.replace(/\.xlsx$/i, '')}-${scenario.name}.xlsx`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      alert(`Write to DAP failed: ${err.message}`);
+    }
+  }, [acctKey, fiscalCalendar]);
+
   const handleComposeSave = useCallback(({ name, tag, distributionId, pricingId, promotionId }) => {
     setSavedScenarios(ss => [...ss, {
       id: `sc-${Date.now()}`,
@@ -595,6 +652,7 @@ export default function App() {
     <div className={"app" + (dragging ? " drag" : "")}>
       <TopBar view={view} setView={setView} account={devData?.account} onExport={handleExport} onImportClick={() => importRef.current?.click()} />
       <input ref={importRef} type="file" accept=".json" hidden onChange={handleImportFile} />
+      <input ref={writeDapInputRef} type="file" accept=".xlsx" hidden onChange={handleWriteDAPFile} />
       <ContextBar account={devData?.account} skuCount={skuCount} />
 
       {/* ── Distribution tab ── */}
@@ -752,6 +810,7 @@ export default function App() {
             onUpdateScenario={updateScenario}
             onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
             onCreateDistributionBlock={createDistributionBlock}
+            onWriteToDAP={handleWriteToDAP}
           />
         </div>
       )}

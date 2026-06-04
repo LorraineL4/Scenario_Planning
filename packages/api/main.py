@@ -1,6 +1,6 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, UploadFile, File, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from pydantic import BaseModel
 from pathlib import Path
 from typing import List, Optional
@@ -16,6 +16,7 @@ sys.path.insert(0, str(ENGINE_DIR))
 from extract_config import extract as extract_config
 from extract_inputs import extract as extract_inputs
 from run_account import run_account
+from write_dap import write_dap
 
 app = FastAPI(title="Scenario Planning API", version="0.1.0")
 
@@ -170,3 +171,58 @@ def _merge_skus(config_skus: dict, inputs_skus: dict) -> dict:
             "promo_periods":      promo_periods,
         }
     return result
+
+
+@app.post("/api/write-dap")
+async def write_dap_endpoint(
+    file: UploadFile = File(...),
+    payload: str = Form(...),
+):
+    """
+    Accept a DAP .xlsx and a JSON payload, overwrite the scenario inputs,
+    and return the modified workbook as a file download.
+
+    Payload shape:
+        {
+          "scenario_name": str,
+          "distribution_rows": [{SKU_name, months: {month: acv_0_100}, ...}],
+          "promo_grid": {"sku|||P01": {name, promo_price, weeks, scan, fixed_fee, expected_lift}},
+          "fiscal_calendar": {"P01": {"month": "Jul", ...}, ...}
+        }
+    """
+    if not (file.filename or "").endswith(".xlsx"):
+        raise HTTPException(400, "Only .xlsx files are supported.")
+
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(400, f"Invalid payload JSON: {exc}")
+
+    scenario_name    = data.get("scenario_name") or "scenario"
+    distribution_rows = data.get("distribution_rows") or []
+    promo_grid        = data.get("promo_grid") or {}
+    fiscal_calendar   = data.get("fiscal_calendar") or {}
+
+    tmp_dir = Path(tempfile.mkdtemp())
+    try:
+        src_path = tmp_dir / (file.filename or "source.xlsx")
+        with src_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+
+        out_path = write_dap(
+            source_xlsx=src_path,
+            scenario_name=scenario_name,
+            distribution_rows=distribution_rows,
+            promo_grid=promo_grid,
+            fiscal_calendar=fiscal_calendar,
+            output_dir=tmp_dir,
+        )
+
+        return FileResponse(
+            path=str(out_path),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            filename=out_path.name,
+        )
+    except Exception as exc:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+        raise HTTPException(422, str(exc))
