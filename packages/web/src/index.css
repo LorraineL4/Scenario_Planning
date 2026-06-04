@@ -1,4 +1,5 @@
 :root {
+  /* Core palette (existing) */
   --olive: #165788;
   --olive-dark: #0f4067;
   --ink: #1a2630;
@@ -15,6 +16,22 @@
   --grp-bg: #e7ebee;
   --shadow: 0 1px 2px rgba(22,42,60,.07), 0 8px 24px rgba(22,42,60,.12);
   --radius: 10px;
+
+  /* Aliases & additions for new UI components */
+  --navy: #165788;
+  --navy-50: rgba(22,87,136,.08);
+  --navy-700: #0f4067;
+  --coral: #F7403A;
+  --slate: #5e6a71;
+  --ink-2: #3a4a55;
+  --line-2: #eef1f3;
+  --panel-2: #f7f9fa;
+  --pos: #14794f;
+  --neg: #c0392b;
+  --shadow-sm: 0 1px 3px rgba(22,42,60,.07), 0 2px 8px rgba(22,42,60,.06);
+
+  /* Layout */
+  --gut: 24px;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
@@ -166,3 +183,8 @@ td.empty { padding: 40px; text-align: center; color: var(--muted); }
 /* ---------- drop overlay ---------- */
 .drop-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(22,87,136,.14); backdrop-filter: blur(2px); display: grid; place-items: center; pointer-events: none; }
 .drop-overlay-inner { background: var(--olive); color: #eef1f3; padding: 18px 28px; border-radius: 12px; font-weight: 600; box-shadow: var(--shadow); border: 2px dashed rgba(255,255,255,.5); }
+
+/* ---------- utility classes for compare / scenario UI ---------- */
+.mono { font-family: "IBM Plex Mono", monospace; font-variant-numeric: tabular-nums; }
+.fade-in { animation: fadeIn .18s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
