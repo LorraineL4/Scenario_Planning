@@ -185,7 +185,12 @@ export default function PromotionEditor({
   }
 
   const handleSaveNew = (name) => {
-    onSaveNew?.(name, { promos, grid }); setSaveModalOpen(false)
+    const id = `promo-${Date.now()}`
+    const state = { promos, grid }
+    onSaveNew?.(id, name, state)
+    setActiveBlock({ id, name, inputs: state })
+    onBlockChange?.(id)
+    setSaveModalOpen(false)
   }
 
   const handleOverwrite = () => {

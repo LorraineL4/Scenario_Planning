@@ -44,6 +44,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
   const [pendingPromoId,   setPendingPromoId]   = useState(savedPromoId)
   const [pendingPricingId, setPendingPricingId] = useState(savedPricingId)
   const [computedFinancials, setComputedFinancials] = useState(null)
+  const [blockRevision, setBlockRevision] = useState(0)
 
   useEffect(() => {
     if (!scenario) return
@@ -106,7 +107,7 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
       .then(r => r.ok ? r.json() : null)
       .then(data => setComputedFinancials(data))
       .catch((err) => console.error('[compute]', err))
-  }, [pendingDistId, pendingPricingId, pendingPromoId])  // eslint-disable-line
+  }, [pendingDistId, pendingPricingId, pendingPromoId, blockRevision])  // eslint-disable-line
 
   const isDistDirty    = pendingDistId    !== savedDistId
   const isPromoDirty   = pendingPromoId   !== savedPromoId
@@ -119,6 +120,44 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
     if (isPromoDirty)   updates.promotionId    = pendingPromoId
     if (isPricingDirty) updates.pricingId      = pendingPricingId
     if (Object.keys(updates).length) onUpdateScenario?.(scenario.id, updates)
+  }
+
+  // Auto-save the scenario immediately after any block is saved (new or overwrite).
+  // Collects all pending changes so the user doesn't need a separate "Save Scenario" click.
+  const autoSave = (overrides) => {
+    const updates = { ...overrides }
+    if (pendingDistId    !== savedDistId)    updates.distributionId = pendingDistId
+    if (pendingPromoId   !== savedPromoId)   updates.promotionId    = pendingPromoId
+    if (pendingPricingId !== savedPricingId) updates.pricingId      = pendingPricingId
+    onUpdateScenario?.(scenario.id, updates)
+  }
+
+  const handleCreateDistBlock = (id, name, data) => {
+    onSaveNew?.(id, name, data)
+    autoSave({ distributionId: id })
+  }
+  const handleOverwriteDist = (blockId, data) => {
+    onOverwrite?.(blockId, data)
+    autoSave({ distributionId: blockId })
+    setBlockRevision(r => r + 1)
+  }
+  const handleCreatePromoBlock = (id, name, data) => {
+    onCreatePromoBlock?.(id, name, data)
+    autoSave({ promotionId: id })
+  }
+  const handleOverwritePromo = (blockId, data) => {
+    onSavePromotion?.(blockId, data)
+    autoSave({ promotionId: blockId })
+    setBlockRevision(r => r + 1)
+  }
+  const handleCreatePricingBlock = (id, name, data) => {
+    onCreatePricingBlock?.(id, name, data)
+    autoSave({ pricingId: id })
+  }
+  const handleOverwritePricing = (blockId, data) => {
+    onSavePricing?.(blockId, data)
+    autoSave({ pricingId: blockId })
+    setBlockRevision(r => r + 1)
   }
 
   if (!scenario) {
@@ -271,8 +310,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           blocks={blocks.distribution || []}
           baseRows={baseRows}
           showBasePlan={true}
-          onSaveNew={onSaveNew}
-          onOverwrite={onOverwrite}
+          onSaveNew={handleCreateDistBlock}
+          onOverwrite={handleOverwriteDist}
           onBlockChange={setPendingDistId}
           months={months}
         />
@@ -284,8 +323,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           fiscalCalendar={fiscalCalendar}
           blocks={blocks.pricing || []}
           initialActiveBlock={pricingBlock}
-          onSaveNew={onCreatePricingBlock}
-          onOverwrite={(blockId, snapshot) => onSavePricing(blockId, snapshot)}
+          onSaveNew={handleCreatePricingBlock}
+          onOverwrite={handleOverwritePricing}
           onBlockChange={setPendingPricingId}
         />
       )}
@@ -300,8 +339,8 @@ function ScenarioDetail({ scenario, devData, blocks, baseRows, fiscalCalendar, b
           basePromos={basePromoState?.promos || []}
           rows={baseRows}
           fiscalCalendar={fiscalCalendar}
-          onSaveNew={onCreatePromoBlock}
-          onOverwrite={(blockId, state) => onSavePromotion(blockId, state)}
+          onSaveNew={handleCreatePromoBlock}
+          onOverwrite={handleOverwritePromo}
           onBlockChange={setPendingPromoId}
         />
       )}

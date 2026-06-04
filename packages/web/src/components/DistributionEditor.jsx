@@ -259,8 +259,11 @@ export default function DistributionEditor({
   }, [onBlockChange])
 
   const handleSaveNew = (name) => {
+    const id = `dist-${Date.now()}`
     const snapshot = rows.map(r => ({ ...r, months: { ...r.months } }))
-    onSaveNew?.(name, snapshot)
+    onSaveNew?.(id, name, snapshot)
+    setActiveBlock({ id, name, inputs: snapshot })
+    onBlockChange?.(id)
     setSaveModalOpen(false)
   }
 
@@ -269,7 +272,10 @@ export default function DistributionEditor({
     if (activeBlock) {
       onOverwrite?.(activeBlock.id, snapshot)
     } else {
-      onSaveNew?.('Base Distribution', snapshot)
+      const id = `dist-${Date.now()}`
+      onSaveNew?.(id, 'Base Distribution', snapshot)
+      setActiveBlock({ id, name: 'Base Distribution', inputs: snapshot })
+      onBlockChange?.(id)
     }
     setSaveModalOpen(false)
   }

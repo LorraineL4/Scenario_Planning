@@ -307,7 +307,11 @@ export default function PricingView({
   const snapshot = () => JSON.parse(JSON.stringify(pricingData))
 
   const handleSaveNew = (name) => {
-    onSaveNew?.(name, snapshot())
+    const id = `pricing-${Date.now()}`
+    const snap = snapshot()
+    onSaveNew?.(id, name, snap)
+    setActiveBlock({ id, name, inputs: snap })
+    onBlockChange?.(id)
     setSaveModalOpen(false)
   }
 

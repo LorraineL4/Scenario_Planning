@@ -562,9 +562,9 @@ export default function App() {
     }
   }, []);
 
-  const createDistributionBlock = useCallback((name, rows) => {
+  const createDistributionBlock = useCallback((id, name, rows) => {
     const newBlock = {
-      id: `dist-${Date.now()}`,
+      id,
       name,
       note: `${rows.length} SKUs · saved`,
       created_at: new Date().toISOString(),
@@ -573,11 +573,11 @@ export default function App() {
     setBlocks(b => ({ ...b, distribution: [...b.distribution, newBlock] }));
   }, []);
 
-  const savePricingBlock = useCallback((name, snapshot) => {
+  const savePricingBlock = useCallback((id, name, snapshot) => {
     setBlocks(b => ({
       ...b,
       pricing: [...b.pricing, {
-        id: `pricing-${Date.now()}`,
+        id,
         name,
         note: `${Object.keys(snapshot).length} SKUs · saved`,
         created_at: new Date().toISOString(),
@@ -597,9 +597,9 @@ export default function App() {
     }));
   }, []);
 
-  const createPromotionBlock = useCallback((name, state) => {
+  const createPromotionBlock = useCallback((id, name, state) => {
     const newBlock = {
-      id: `promo-${Date.now()}`,
+      id,
       name,
       note: `${Object.keys(state.grid || {}).length} cells · saved`,
       created_at: new Date().toISOString(),
