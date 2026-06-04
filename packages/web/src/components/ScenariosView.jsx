@@ -30,7 +30,7 @@ function ComingSoonPanel({ label }) {
 
 const SUB_TABS = ['distribution', 'pricing', 'promotion']
 
-function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario }) {
+function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOverwrite, onUpdateScenario, months }) {
   const [subTab, setSubTab] = useState('distribution')
   const [confirming, setConfirming] = useState(false)
 
@@ -206,6 +206,7 @@ function ScenarioDetail({ scenario, blocks, baseRows, onDelete, onSaveNew, onOve
           onSaveNew={onSaveNew}
           onOverwrite={onOverwrite}
           onBlockChange={setPendingDistId}
+          months={months}
         />
       )}
       {subTab === 'pricing' && <ComingSoonPanel label="Pricing" />}
@@ -268,6 +269,7 @@ export default function ScenariosView({
   onUpdateScenario,
   onSaveDistribution,
   onCreateDistributionBlock,
+  months,
 }) {
   const allItems = [
     ...scenarios.map(s => ({ ...s, _isBase: true })),
@@ -345,6 +347,7 @@ export default function ScenariosView({
         onSaveNew={onCreateDistributionBlock}
         onOverwrite={(blockId, rows) => onSaveDistribution(blockId, rows)}
         onUpdateScenario={onUpdateScenario}
+        months={months}
       />
     </div>
   )

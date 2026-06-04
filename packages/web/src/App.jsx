@@ -793,6 +793,7 @@ export default function App() {
             onUpdateScenario={updateScenario}
             onSaveDistribution={(blockId, inputs) => updateBlockInputs('distribution', blockId, inputs)}
             onCreateDistributionBlock={createDistributionBlock}
+            months={months}
           />
         </div>
       )}
