@@ -1,5 +1,4 @@
 import React, { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { parseDAP } from './dap-xlsx.js';
 import CompareView from './components/CompareView.jsx';
 import ScenarioListView from './components/ScenarioListView.jsx';
 import ScenariosView from './components/ScenariosView.jsx';
@@ -255,41 +254,27 @@ export default function App() {
     if (!file) return;
     setLoading(true); setErr(null);
     try {
-      const buf = await file.arrayBuffer();
       const fd = new FormData();
       fd.append('file', file);
+      const r = await fetch('/api/extract', { method: 'POST', body: fd });
+      if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
+      const data = await r.json();
 
-      const [parsedResult, engineResult] = await Promise.allSettled([
-        parseDAP(buf),
-        fetch('/api/extract', { method: 'POST', body: fd })
-          .then(async r => {
-            if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
-            return r.json();
-          }),
-      ]);
-
-      if (parsedResult.status === 'fulfilled') {
-        const tableRows = parsedResult.value.rows.map(r => ({ ...r, months: { ...r.months } }));
-        setRows(tableRows);
-        setMeta({ sheet: parsedResult.value.sheet, count: tableRows.length, file: file.name });
-        setBaseRows(tableRows);
-        setActiveBlockId(null);
-      } else {
-        throw parsedResult.reason;
-      }
-
-      if (engineResult.status === 'fulfilled') {
-        setDevData(engineResult.value);
-        const acctKey = engineResult.value?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
-        if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
-        setBlocks({ distribution: [], pricing: [], promotion: [] });
-        setSavedScenarios([]);
-        setBaseScenarioOverrides({});
-        setBasePricingSnapshot(null);
-        setBasePromoSnapshot(null);
-      }
-      // If engine API is unreachable, the compare tab shows a graceful "no data" state
-
+      const serverRows = devDataToRows(data);
+      setRows(serverRows);
+      setBaseRows(serverRows);
+      setMeta({ sheet: data.account?.account_name || file.name, count: serverRows.length, file: file.name });
+      setDevData(data);
+      setActiveBlockId(null);
+      setActiveIsBase(false);
+      setShowBasePlan(true);
+      const acctKey = data?.account?.account_name?.toLowerCase().replace(/\s+/g, '_');
+      if (acctKey) { try { localStorage.removeItem(`scenario-workspace-${acctKey}`); localStorage.removeItem(`promo-state-${acctKey}`); } catch {} }
+      setBlocks({ distribution: [], pricing: [], promotion: [] });
+      setSavedScenarios([]);
+      setBaseScenarioOverrides({});
+      setBasePricingSnapshot(null);
+      setBasePromoSnapshot(null);
       setEdited(new Set()); setSearch(""); setCollapsed(new Set());
     } catch (e) {
       setErr(e.message || String(e));

@@ -146,6 +146,8 @@ async def compute_scenario(req: ComputeRequest):
             sku = inp.get("skus", {}).get(row.SKU_name)
             if not sku:
                 continue
+            # Save original velocity before overwriting — needed for ratio calculation below.
+            orig_velocity = sku.get("velocity") or row.unit_velocity
             sku["velocity"] = row.unit_velocity
             periods = sku.get("periods", {})
             for month, pct in row.months.items():
@@ -161,8 +163,7 @@ async def compute_scenario(req: ComputeRequest):
             # rather than recomputing from a single-item simplified formula.
             if "effective_velocity_by_period" in sku:
                 orig_acv = sku.get("acv_pct", {})
-                vel_ratio = (row.unit_velocity / sku.get("velocity", row.unit_velocity)
-                             if sku.get("velocity") else 1.0)
+                vel_ratio = row.unit_velocity / orig_velocity if orig_velocity else 1.0
                 for p, orig_eff_vel in sku["effective_velocity_by_period"].items():
                     new_acv = sku.get("periods", {}).get(p, {}).get("acv_pct")
                     orig = orig_acv.get(p, 0)
