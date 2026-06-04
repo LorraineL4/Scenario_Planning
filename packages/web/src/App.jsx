@@ -586,10 +586,28 @@ export default function App() {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       try {
         const data = JSON.parse(ev.target.result);
         if (data.devData) setDevData(data.devData);
+        // Re-establish the server compute baseline from the embedded raw inputs.
+        // Older exports lack config/inputs — compute stays unavailable until the
+        // DAP is re-imported, so surface that rather than failing silently.
+        const { config, inputs } = data.devData || {};
+        if (config && inputs) {
+          try {
+            const r = await fetch('/api/set-base', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config, inputs }),
+            });
+            if (!r.ok) { const j = await r.json().catch(() => ({})); throw new Error(j.detail || r.statusText); }
+          } catch (err) {
+            setErr(`Imported, but couldn't set engine baseline: ${err.message}. Compute may be unavailable.`);
+          }
+        } else {
+          setErr('Imported an older file without engine data — re-import the DAP to enable compute.');
+        }
         if (data.blocks) {
           setBlocks(data.blocks);
           // Sync baseRows from the __base__ distribution block

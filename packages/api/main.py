@@ -35,12 +35,43 @@ async def health():
     return {"status": "ok"}
 
 
+class BaseData(BaseModel):
+    config: Dict = {}
+    inputs: Dict = {}
+
+
+def _persist_base(config: dict, inputs: dict) -> None:
+    """Write config.json + inputs.json to data/processed/ — the baseline that
+    /api/compute reads on every call.  Any entry point that establishes a base
+    (DAP extract, dev-data load, scenario import) routes through here."""
+    processed_dir = REPO_ROOT / "data" / "processed"
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    (processed_dir / "config.json").write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
+    (processed_dir / "inputs.json").write_text(json.dumps(inputs, ensure_ascii=False), encoding="utf-8")
+
+
 @app.get("/api/dev-data")
 async def dev_data():
     path = REPO_ROOT / "data" / "processed" / "dev_data.json"
     if not path.exists():
         raise HTTPException(404, "dev_data.json not found — run: python packages/api/gen_dev_data.py <DAP.xlsx>")
-    return JSONResponse(json.loads(path.read_text(encoding="utf-8")))
+    data = json.loads(path.read_text(encoding="utf-8"))
+    # Establish the compute baseline from the embedded raw inputs so loading
+    # dev data alone makes /api/compute work (no pre-run extract scripts needed).
+    if data.get("config") and data.get("inputs"):
+        _persist_base(data["config"], data["inputs"])
+    return JSONResponse(data)
+
+
+@app.post("/api/set-base")
+async def set_base(payload: BaseData):
+    """Persist a client-supplied config+inputs pair as the compute baseline.
+    Used when importing a saved-scenarios JSON so compute works without the
+    original DAP file present."""
+    if not payload.config or not payload.inputs:
+        raise HTTPException(400, "Both config and inputs are required.")
+    _persist_base(payload.config, payload.inputs)
+    return {"status": "ok", "skus": len(payload.inputs.get("skus", {}))}
 
 
 @app.post("/api/extract")
@@ -62,10 +93,7 @@ async def extract_workbook(file: UploadFile = File(...)):
         tmp_path.unlink(missing_ok=True)
 
     # Persist for /api/compute
-    processed_dir = REPO_ROOT / "data" / "processed"
-    processed_dir.mkdir(parents=True, exist_ok=True)
-    (processed_dir / "config.json").write_text(json.dumps(config, ensure_ascii=False), encoding="utf-8")
-    (processed_dir / "inputs.json").write_text(json.dumps(inputs, ensure_ascii=False), encoding="utf-8")
+    _persist_base(config, inputs)
 
     _add_account_periods(results)
 
@@ -74,6 +102,10 @@ async def extract_workbook(file: UploadFile = File(...)):
         "account":         inputs.get("account", {}),
         "skus":            _merge_skus(config.get("skus", {}), inputs.get("skus", {})),
         "results":         results,
+        # Raw engine inputs so the client can carry them into exports and
+        # re-establish the server baseline on import (see /api/set-base).
+        "config":          config,
+        "inputs":          inputs,
     }
 
 

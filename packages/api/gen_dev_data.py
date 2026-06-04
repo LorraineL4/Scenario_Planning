@@ -97,6 +97,10 @@ def main():
         "account":         inputs.get("account", {}),
         "skus":            merge_skus(config.get("skus", {}), inputs.get("skus", {})),
         "results":         results,
+        # Raw engine inputs — /api/dev-data writes these out as the compute
+        # baseline so loading dev data alone makes /api/compute work.
+        "config":          config,
+        "inputs":          inputs,
     }
 
     out = REPO_ROOT / "data" / "processed" / "dev_data.json"

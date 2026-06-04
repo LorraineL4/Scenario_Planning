@@ -125,7 +125,8 @@ PG_PERIOD_INPUTS = {
     "brick_promo2":             {"row": 93},
 }
 
-_DIST_COL_SKU_NAME       = 2   # B — Product Group name
+_DIST_COL_SKU_NAME       = 2   # B — Product Group name (a HYPERLINK formula; reads None with data_only=True)
+_DIST_COL_SKU_TEXT       = 3   # C — plain-text PG name the col-B HYPERLINK displays; always readable
 _DIST_COL_VELOCITY       = 12  # L — Account Base Unit Velocity (units/store/week)
 _DIST_COL_ACV_CURRENT    = 14  # N — current account ACV % (prior-period base for P01 delta)
 _DIST_COL_ACV_P01        = 16  # P = P01; Q=P02 … AA=P12 (whole %, e.g. 99.52)
@@ -178,7 +179,10 @@ def extract_distribution_inputs(wb, periods=None, period_col=None) -> dict:
 
     for row in ws.iter_rows(min_row=_DIST_DATA_START_ROW, values_only=False):
         cell_b = row[_DIST_COL_SKU_NAME - 1]
-        raw = cell_b.value
+        # Col B is a HYPERLINK formula displaying col C; with data_only=True it
+        # reads None, so take the PG name from col C (plain text) and fall back to B.
+        cell_c = row[_DIST_COL_SKU_TEXT - 1]
+        raw = cell_c.value if isinstance(cell_c.value, str) else cell_b.value
         if not isinstance(raw, str) or not raw.strip():
             continue
         name = raw.strip()
