@@ -153,13 +153,20 @@ async def compute_scenario(req: ComputeRequest):
             for p in sku.get("probability", {}):
                 sku["probability"][p] = prob
 
-            # effective_velocity_by_period is the baseline the engine actually reads.
-            # Recompute it from the new velocity × acv_pct × probability so the
-            # engine reflects the block's overrides rather than the extracted defaults.
+            # Scale effective_velocity_by_period by the ratio of new ACV to original ACV.
+            # This preserves the multi-item SUMPRODUCT structure from extract_inputs.py
+            # rather than recomputing from a single-item simplified formula.
             if "effective_velocity_by_period" in sku:
-                for p, _ in sku["effective_velocity_by_period"].items():
-                    acv = sku.get("periods", {}).get(p, {}).get("acv_pct", 0)
-                    sku["effective_velocity_by_period"][p] = row.unit_velocity * acv * prob
+                orig_acv = sku.get("acv_pct", {})
+                vel_ratio = (row.unit_velocity / sku.get("velocity", row.unit_velocity)
+                             if sku.get("velocity") else 1.0)
+                for p, orig_eff_vel in sku["effective_velocity_by_period"].items():
+                    new_acv = sku.get("periods", {}).get(p, {}).get("acv_pct")
+                    orig = orig_acv.get(p, 0)
+                    if new_acv is not None and orig > 0:
+                        sku["effective_velocity_by_period"][p] = orig_eff_vel * vel_ratio * (new_acv / orig)
+                    elif new_acv is not None:
+                        sku["effective_velocity_by_period"][p] = orig_eff_vel * vel_ratio
 
     if req.pricing_rows:
         for row in req.pricing_rows:
